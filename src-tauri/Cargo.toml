@@ -1,0 +1,36 @@
+[package]
+name = "aetherlog"
+version = "1.0.0"
+license = "MIT"
+description = "FF14 chat / system log viewer (read-only)"
+edition = "2021"
+
+[[bin]]
+name = "Aetherlog"
+path = "src/main.rs"
+
+[lib]
+name = "aetherlog_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = "2"
+
+# No debug information anywhere: it only bloats target/ (and produces .pdb files).
+[profile.dev]
+debug = false
+incremental = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = false
+strip = true

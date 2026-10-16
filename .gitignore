@@ -1,0 +1,10 @@
+src-tauri/target/
+src-tauri/target-*/
+src-tauri/gen/
+web/node_modules/
+web/dist/
+artifacts/
+data/
+tools/.cache/
+__pycache__/
+legacy_python/

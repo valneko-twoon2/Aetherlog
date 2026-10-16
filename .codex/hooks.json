@@ -1,0 +1,16 @@
+{
+  "description": "Require committed changes before reporting successful completion.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$(git rev-parse --show-toplevel)/.agents/hooks/require_commit.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
