@@ -23,6 +23,7 @@ const call = async (command, args) => {
 export const get = (path) => {
   if (path === '/api/state') return call('state')
   if (path === '/api/meta') return call('meta')
+  if (path === '/api/notices') return call('notices')
   throw new Error(`unknown route ${path}`)
 }
 

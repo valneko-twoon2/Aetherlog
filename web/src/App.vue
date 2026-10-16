@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ChatWindow from './components/ChatWindow.vue'
-import { download, onDrop, post } from './api.js'
+import { download, get, onDrop, post } from './api.js'
 import { cancelLoad, deleteCharacter, exportBody, filters, meta, poll, reload, renameCharacter, startLoad, state, view } from './useLog.js'
 
 const path = ref('')
@@ -11,17 +11,29 @@ const message = ref('')
 // Injected by vite.config.js from package.json.
 const version = __APP_VERSION__
 const aboutDlg = ref(null)
+const noticesDlg = ref(null)
+const noticesText = ref('')
 // Closes on a click outside the box. A text selection that is dragged and released over the box
 // padding also ends in a click on the dialog itself, so both press and release must be outside.
-const outside = (e) => {
-  const r = aboutDlg.value.getBoundingClientRect()
-  return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+const closeOnOutside = (dlg) => {
+  const outside = (e) => {
+    const r = dlg.value.getBoundingClientRect()
+    return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+  }
+  let pressedOutside = false
+  return {
+    down: (e) => (pressedOutside = outside(e)),
+    click: (e) => {
+      if (pressedOutside && outside(e)) dlg.value.close()
+      pressedOutside = false
+    },
+  }
 }
-let pressedOutside = false
-const aboutDown = (e) => (pressedOutside = outside(e))
-const aboutClick = (e) => {
-  if (pressedOutside && outside(e)) aboutDlg.value.close()
-  pressedOutside = false
+const aboutClose = closeOnOutside(aboutDlg)
+const noticesClose = closeOnOutside(noticesDlg)
+const openNotices = async () => {
+  noticesText.value ||= await get('/api/notices').catch(() => '（読み込めませんでした）')
+  noticesDlg.value.showModal()
 }
 const license = `MIT License
 
@@ -210,7 +222,7 @@ function save(format) {
 
     <div v-if="dragging" class="drop-hint" aria-hidden="true">ここにドロップして、ログを読み込みます</div>
 
-    <dialog ref="aboutDlg" class="about-pop" @pointerdown="aboutDown" @click="aboutClick">
+    <dialog ref="aboutDlg" class="about-pop" @pointerdown="aboutClose.down" @click="aboutClose.click">
       <h2>Aetherlog</h2>
       <p class="ver">バージョン {{ version }}</p>
       <p>FINAL FANTASY XIV のチャットログとシステムログを、読み取り専用で閲覧するツールです。</p>
@@ -221,7 +233,18 @@ function save(format) {
       <p>非公式のファンメイドツールです。</p>
       <p>株式会社スクウェア・エニックスとは関係がなく、同社の承認も受けていません。</p>
       <p>FINAL FANTASY XIV © SQUARE ENIX</p>
-      <button type="button" class="ff-btn" @click="aboutDlg.close()">閉じる</button>
+      <h3>サードパーティのライセンス</h3>
+      <p>この exe には、オープンソースのソフトウェアが含まれています。</p>
+      <div class="actions">
+        <button type="button" class="ff-btn" @click="openNotices">ライセンスを表示</button>
+        <button type="button" class="ff-btn" @click="aboutDlg.close()">閉じる</button>
+      </div>
+    </dialog>
+
+    <dialog ref="noticesDlg" class="notices-pop" @pointerdown="noticesClose.down" @click="noticesClose.click">
+      <h2>サードパーティのライセンス</h2>
+      <pre class="notices">{{ noticesText }}</pre>
+      <button type="button" class="ff-btn" @click="noticesDlg.close()">閉じる</button>
     </dialog>
 
     <ChatWindow v-if="meta" />

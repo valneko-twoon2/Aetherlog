@@ -302,6 +302,12 @@ fn render(index: u32, e: &Entry, new_day: bool) -> RowView {
     }
 }
 
+/// Licence texts of the bundled open-source packages (`tools/make_notices.ps1`).
+#[tauri::command]
+fn notices() -> &'static str {
+    include_str!("../../THIRD-PARTY-NOTICES.txt")
+}
+
 #[tauri::command]
 async fn state(app: State<'_, Arc<AppState>>) -> Result<StateView, String> {
     let inner = lock(&app.inner);
@@ -580,7 +586,7 @@ pub fn run() {
             app.manage(shared);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![state, meta, load_logs, delete_character, query, export_entries, set_name, open_lodestone])
+        .invoke_handler(tauri::generate_handler![notices, state, meta, load_logs, delete_character, query, export_entries, set_name, open_lodestone])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| eprintln!("Aetherlog stopped: {e}"));
 }

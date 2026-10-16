@@ -110,6 +110,9 @@ function select(params) {
 let manualName = ''
 
 export default {
+  async notices() {
+    return 'Aetherlog third-party notices (sample)\n\n' + 'MIT License\n\nCopyright (c) example\n\n'.repeat(60)
+  },
   async state() {
     const elapsed = Date.now() - STARTED
     if (elapsed < LOAD_MS) {

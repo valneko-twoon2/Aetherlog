@@ -266,7 +266,14 @@ body::after { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.or
 .del-pop { width: 460px; }
 .del-pop p { white-space: normal; }
 .del-pop .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.about-pop .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 .about-pop .actions .ff-btn { display: inline-block; margin: 0; }
+.notices-pop { position: fixed; z-index: 21; inset: 0; margin: auto; width: min(860px, calc(100% - 32px)); height: calc(100% - 48px); display: none; flex-direction: column; padding: 16px 20px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 8px 32px #000a; }
+.notices-pop[open] { display: flex; }
+.notices-pop::backdrop { background: #0a1c3c66; backdrop-filter: blur(2px); }
+.notices-pop h2 { margin: 0 0 8px; color: var(--gold); font-size: 16px; letter-spacing: 0.08em; }
+.notices-pop .notices { flex: 1; min-height: 0; margin: 0; overflow: auto; padding: 8px 10px; background: #0a1226; border: 1px solid var(--line); font: 12px/1.5 var(--mono-font, ui-monospace, Consolas, monospace); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); user-select: text; }
+.notices-pop .ff-btn { align-self: flex-end; margin-top: 10px; }
 .ff-btn.danger { border-color: #8d3a3a; background: linear-gradient(#7a3030, #4a1c1c); color: #ffe0e0; }
 .ff-btn.danger:hover:not(:disabled) { border-color: #d86a6a; background: linear-gradient(#8f3a3a, #5a2222); }
 .del-row { margin-top: 8px; text-align: right; }

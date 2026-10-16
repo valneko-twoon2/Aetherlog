@@ -4,8 +4,9 @@
 
 .DESCRIPTION
   1. Builds the web front end (npm run build).
-  2. Builds the Tauri app without an installer (tauri build --no-bundle).
-  3. Copies Aetherlog.exe into <repo>\artifacts, leaving artifacts\userdata alone.
+  2. Regenerates THIRD-PARTY-NOTICES.txt (tools\make_notices.ps1).
+  3. Builds the Tauri app without an installer (tauri build --no-bundle).
+  4. Copies Aetherlog.exe and THIRD-PARTY-NOTICES.txt into <repo>\artifacts, leaving artifacts\userdata alone.
 
   Run it from anywhere:  powershell -File tools\publish.ps1
   Honors CARGO_TARGET_DIR when it is set (use an absolute path).
@@ -42,6 +43,9 @@ try {
 }
 finally { Pop-Location }
 
+# The licence texts are compiled into the exe, so refresh them before building.
+Invoke-Step 'make_notices' { & (Join-Path $PSScriptRoot 'make_notices.ps1') }
+
 # The tauri CLI finds src-tauri in sub-folders, so it has to run from the repository root.
 Push-Location $root
 try {
@@ -57,6 +61,7 @@ New-Item -ItemType Directory -Force $out | Out-Null
 $target = Join-Path $out 'Aetherlog.exe'
 Remove-Item $target -Force -ErrorAction SilentlyContinue
 Copy-Item $built $target -Force
+Copy-Item (Join-Path $root 'THIRD-PARTY-NOTICES.txt') $out -Force
 
 Write-Host "Published to $out" -ForegroundColor Green
 Get-ChildItem $out | Format-Table Name, Length -AutoSize

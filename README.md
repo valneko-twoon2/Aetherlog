@@ -81,4 +81,4 @@ FINAL FANTASY XIV © SQUARE ENIX
 
 ## License
 
-MIT. See [LICENSE](LICENSE). The license covers the Aetherlog source code only, not the game content it displays.
+MIT. See [LICENSE](LICENSE). The license covers the Aetherlog source code only, not the game content it displays. Third-party licences are listed in [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) and in the app (`Aetherlog について`).

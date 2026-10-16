@@ -79,4 +79,4 @@ FINAL FANTASY XIV © SQUARE ENIX
 
 ## ライセンス
 
-MIT ライセンスです。[LICENSE](LICENSE) を参照してください。対象は Aetherlog のソースコードだけで、表示するゲームの内容は含みません。
+MIT ライセンスです。[LICENSE](LICENSE) を参照してください。対象は Aetherlog のソースコードだけで、表示するゲームの内容は含みません。サードパーティのライセンスは、[`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) とアプリ内（`Aetherlog について`）に載せています。
