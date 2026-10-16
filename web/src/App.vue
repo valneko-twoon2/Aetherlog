@@ -246,13 +246,13 @@ function save(format) {
       <p>株式会社スクウェア・エニックスとは関係がなく、同社の承認も受けていません。</p>
       <p>FINAL FANTASY XIV © SQUARE ENIX</p>
       <div class="actions">
-        <button type="button" class="ff-btn" @click="openNotices">ライセンス一覧</button>
+        <button type="button" class="ff-btn" @click="openNotices">Credits</button>
         <button type="button" class="ff-btn" @click="aboutDlg.close()">閉じる</button>
       </div>
     </dialog>
 
     <dialog ref="noticesDlg" class="notices-pop" @pointerdown="noticesClose.down" @click="noticesClose.click">
-      <h2>ライセンス</h2>
+      <h2>Credits</h2>
       <ul v-if="notices && notices.packages.length" class="notice-list">
         <li v-for="(p, i) in notices.packages" :key="i" :class="{ open: openedPackage === i }">
           <div class="notice-row">
