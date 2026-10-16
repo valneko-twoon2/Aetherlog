@@ -67,6 +67,7 @@ $env:AETHERLOG_LOGS='<log folder>'; cargo test --release real_logs -- --ignored 
 - `tauri.conf.json` has no `beforeBuildCommand`: **run `npm run build` in `web/` first**.
 - `real_logs_summary` prints counts, warnings and guessed names for a real log folder. It matched the retired Python backend exactly on file count, record count, text length and warning count.
 - For development, run `npm run dev` in `web/` (port 5173, fixed) in another terminal, then `tauri dev` from the root.
+- The window icon that tao builds has a broken AND mask (one byte per pixel instead of one bit), which the Task Manager shows as stripes. `fix_window_icon` in `lib.rs` replaces the small and big window icons at start-up with ones extracted from the exe's own resources (`PrivateExtractIconsW`, no extra crate). Check with a `GetIconInfo` mask dump of `WM_GETICON` if it ever regresses.
 - Icons originate from `src-tauri/app-icon.png`. After `tauri icon`, run `tools/generate_icons.ps1` (Python with Pillow required) to regenerate Windows sizes with legacy transparency masks for Task Manager.
 
 ## 4. Regenerating the data

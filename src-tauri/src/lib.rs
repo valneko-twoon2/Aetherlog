@@ -558,6 +558,36 @@ fn start_dictionary(state: &Arc<AppState>) {
     });
 }
 
+/// The window icon the toolkit creates carries a broken transparency mask, which the Task
+/// Manager (and any other shell view that draws with the mask) shows as stripes.  Replace it with
+/// icons taken from the exe's own resources, which are built with correct masks.
+#[cfg(windows)]
+fn fix_window_icon(window: &tauri::WebviewWindow) {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "user32")]
+    extern "system" {
+        fn PrivateExtractIconsW(file: *const u16, index: i32, cx: i32, cy: i32, icons: *mut isize, ids: *mut u32, count: u32, flags: u32) -> u32;
+        fn SendMessageW(hwnd: isize, message: u32, wparam: usize, lparam: isize) -> isize;
+        fn GetDpiForWindow(hwnd: isize) -> u32;
+    }
+    const WM_SETICON: u32 = 0x0080;
+    let Ok(hwnd) = window.hwnd() else { return };
+    let hwnd = hwnd.0 as isize;
+    let Ok(exe) = std::env::current_exe() else { return };
+    let file: Vec<u16> = exe.as_os_str().encode_wide().chain(Some(0)).collect();
+    let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96) as i32;
+    // (ICON_SMALL, 16 px) and (ICON_BIG, 32 px) at the window's scale.
+    for (kind, base) in [(0usize, 16), (1usize, 32)] {
+        let size = base * dpi / 96;
+        let (mut icon, mut id) = (0isize, 0u32);
+        let found = unsafe { PrivateExtractIconsW(file.as_ptr(), 0, size, size, &mut icon, &mut id, 1, 0) };
+        if found > 0 && icon != 0 {
+            // The icon lives as long as the window; it is intentionally never destroyed.
+            unsafe { SendMessageW(hwnd, WM_SETICON, kind, icon) };
+        }
+    }
+}
+
 fn default_log_root(app: &tauri::App, data_dir: &Path) -> PathBuf {
     // An explicit override, handy for demos and development.
     if let Some(root) = std::env::var_os("AETHERLOG_LOGS").map(PathBuf::from).filter(|p| p.exists()) {
@@ -597,6 +627,10 @@ pub fn run() {
             }
             start_dictionary(&shared);
             app.manage(shared);
+            #[cfg(windows)]
+            if let Some(window) = app.get_webview_window("main") {
+                fix_window_icon(&window);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![notices, open_homepage, state, meta, load_logs, delete_character, query, export_entries, set_name, open_lodestone])
