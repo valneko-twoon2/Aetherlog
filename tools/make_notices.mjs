@@ -4,11 +4,13 @@
 //   src-tauri/notices.json    compiled into the exe for the licence window: packages with
 //                             their homepage and indexes into the shared list of texts
 // Run it through tools\make_notices.ps1; tools\publish.ps1 does so before every build.
+// With --check nothing is written: it exits 1 when the files are out of date (.githooks/pre-commit).
 import { execFileSync, execSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+const check = process.argv.includes('--check')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const options = (cwd) => ({ cwd, maxBuffer: 1 << 29, encoding: 'utf8' })
 
@@ -118,12 +120,24 @@ if (withoutText.length) {
   out += `\nPackages that ship no licence file (licence as declared in their metadata):\n\n`
   out += withoutText.map((p) => `  ${label(p)} ${p.repository}`.trimEnd()).join('\n') + '\n'
 }
-writeFileSync(join(root, 'THIRD-PARTY-NOTICES.txt'), out)
+const outdated = []
+const write = (path, content) => {
+  const file = join(root, path)
+  const current = existsSync(file) ? readFileSync(file, 'utf8').replaceAll('\r\n', '\n') : null
+  if (current === content) return
+  if (check) outdated.push(path)
+  else writeFileSync(file, content)
+}
+write('THIRD-PARTY-NOTICES.txt', out)
 
 // ---- src-tauri/notices.json: what the licence window lists.
 const json = {
   packages: packages.map((p) => ({ n: p.name, v: p.version, l: p.license, h: p.homepage, t: [...used.get(p)].sort((a, b) => a - b) })),
   texts,
 }
-writeFileSync(join(root, 'src-tauri', 'notices.json'), JSON.stringify(json))
-console.log(`${packages.length} packages, ${texts.length} licence texts, ${withoutText.length} without a licence file`)
+write('src-tauri/notices.json', JSON.stringify(json))
+if (outdated.length) {
+  console.error(`Out of date: ${outdated.join(', ')}\nThe dependencies changed. Run tools/make_notices.ps1 and stage both files.`)
+  process.exit(1)
+}
+console.log(`${packages.length} packages, ${texts.length} licence texts, ${withoutText.length} without a licence file${check ? ' (up to date)' : ''}`)

@@ -30,7 +30,7 @@ Rules for AI agents and contributors working in this repository. Read the skills
 The rules above are enforced, not just requested:
 
 - `.githooks/commit-msg` rejects non-English messages and `Co-Authored-By:` trailers.
-- `.githooks/pre-commit` rejects staged documentation or source comments that contain Japanese text.
+- `.githooks/pre-commit` rejects staged documentation or source comments that contain Japanese text, and a dependency change (`Cargo.toml`/`Cargo.lock`, `web/package.json`/`package-lock.json`) whose `THIRD-PARTY-NOTICES.txt` and `src-tauri/notices.json` were not regenerated and staged with it.
 - `.claude/hooks/guard_commit.py` (registered in `.claude/settings.json`) stops Claude Code from running a commit that carries a `Co-Authored-By:` trailer, uses `--no-verify`, or repoints `core.hooksPath`.
 - `.codex/hooks.json` registers a Codex `Stop` hook that continues the agent when
   tracked changes or non-ignored untracked files remain. Claude Code registers the
@@ -51,6 +51,7 @@ The hooks need `python` on the PATH. The scripts in `tools/` are PowerShell, eac
 
 ## Working rules
 
+- When a dependency is added, removed or updated, run `tools/make_notices.ps1` and commit `THIRD-PARTY-NOTICES.txt` and `src-tauri/notices.json` with it (the Credits window and the exe's licence notices come from them).
 - The tool is read-only on the original logs. Exports go only to `.csv` or `.json` files; never write to a `.log`. The only thing the app deletes is one character's folder inside its own archive (`delete_character`, after two confirmations in the UI); the game's logs are never deleted.
 - The only network use at runtime is the one-time download of the lookup tables (`src-tauri/src/dict.rs`, from xivapi/ffxiv-datamining and Dalamud on GitHub) into `userdata\dict`. Ctrl+click on a player name only hands a fixed Lodestone address to the system browser. Only the dialog permissions in `src-tauri/capabilities/default.json` are granted.
 - Game text (the lookup tables) must never be committed or compiled into the exe: it is downloaded on the user's machine, not redistributed.
