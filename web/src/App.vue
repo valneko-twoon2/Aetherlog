@@ -12,7 +12,8 @@ const message = ref('')
 const version = __APP_VERSION__
 const aboutDlg = ref(null)
 const noticesDlg = ref(null)
-const noticesText = ref('')
+const notices = ref(null) // { packages: [{ n, v, l, h, t }], texts }
+const openedPackage = ref(-1)
 // Closes on a click outside the box. A text selection that is dragged and released over the box
 // padding also ends in a click on the dialog itself, so both press and release must be outside.
 const closeOnOutside = (dlg) => {
@@ -32,9 +33,20 @@ const closeOnOutside = (dlg) => {
 const aboutClose = closeOnOutside(aboutDlg)
 const noticesClose = closeOnOutside(noticesDlg)
 const openNotices = async () => {
-  noticesText.value ||= await get('/api/notices').catch(() => '（読み込めませんでした）')
+  if (!notices.value) {
+    try {
+      notices.value = JSON.parse(await get('/api/notices'))
+    } catch {
+      notices.value = { packages: [], texts: [] }
+    }
+  }
+  openedPackage.value = -1
   noticesDlg.value.showModal()
 }
+const openHomepage = (index) => post('/api/homepage', { index }).catch(() => {})
+const toggleLicense = (index) => (openedPackage.value = openedPackage.value === index ? -1 : index)
+const licenseOf = (p) =>
+  p.t.length ? p.t.map((i) => notices.value.texts[i]).join('\n\n---\n\n') : `ライセンス本文は同梱されていません（宣言: ${p.l || '不明'}）`
 const license = `MIT License
 
 Copyright (c) 2026 valneko-twoon2
@@ -233,17 +245,26 @@ function save(format) {
       <p>非公式のファンメイドツールです。</p>
       <p>株式会社スクウェア・エニックスとは関係がなく、同社の承認も受けていません。</p>
       <p>FINAL FANTASY XIV © SQUARE ENIX</p>
-      <h3>サードパーティのライセンス</h3>
-      <p>この exe には、オープンソースのソフトウェアが含まれています。</p>
       <div class="actions">
-        <button type="button" class="ff-btn" @click="openNotices">ライセンスを表示</button>
+        <button type="button" class="ff-btn" @click="openNotices">ライセンス一覧</button>
         <button type="button" class="ff-btn" @click="aboutDlg.close()">閉じる</button>
       </div>
     </dialog>
 
     <dialog ref="noticesDlg" class="notices-pop" @pointerdown="noticesClose.down" @click="noticesClose.click">
-      <h2>サードパーティのライセンス</h2>
-      <pre class="notices">{{ noticesText }}</pre>
+      <h2>ライセンス</h2>
+      <ul v-if="notices && notices.packages.length" class="notice-list">
+        <li v-for="(p, i) in notices.packages" :key="i" :class="{ open: openedPackage === i }">
+          <div class="notice-row">
+            <span class="pkg"><strong>{{ p.n }}</strong> <small>{{ p.v }}</small></span>
+            <span class="lic">{{ p.l }}</span>
+            <button type="button" class="link-btn" :aria-expanded="openedPackage === i" @click="toggleLicense(i)">ライセンスを表示</button>
+            <button type="button" class="link-btn" :disabled="!p.h" @click="openHomepage(i)">ホームページ</button>
+          </div>
+          <pre v-if="openedPackage === i" class="notice-text">{{ licenseOf(p) }}</pre>
+        </li>
+      </ul>
+      <p v-else class="notice-empty">一覧を読み込めませんでした。</p>
       <button type="button" class="ff-btn" @click="noticesDlg.close()">閉じる</button>
     </dialog>
 

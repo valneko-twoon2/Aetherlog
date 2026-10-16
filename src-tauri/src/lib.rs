@@ -302,10 +302,23 @@ fn render(index: u32, e: &Entry, new_day: bool) -> RowView {
     }
 }
 
-/// Licence texts of the bundled open-source packages (`tools/make_notices.ps1`).
+const NOTICES: &str = include_str!("../notices.json");
+
+/// The bundled open-source packages with their licence texts, as JSON (`tools/make_notices.ps1`).
 #[tauri::command]
 fn notices() -> &'static str {
-    include_str!("../../THIRD-PARTY-NOTICES.txt")
+    NOTICES
+}
+
+/// Opens the homepage of package number `index` of the list above in the system browser.
+/// Only the https address stored in the list is used, never one sent by the page.
+#[tauri::command]
+async fn open_homepage(index: usize) -> Result<(), String> {
+    guard(|| {
+        let list: serde_json::Value = serde_json::from_str(NOTICES).map_err(|e| e.to_string())?;
+        let url = list["packages"][index]["h"].as_str().filter(|u| u.starts_with("https://")).ok_or("ホームページがありません")?;
+        std::process::Command::new("rundll32.exe").args(["url.dll,FileProtocolHandler", url]).spawn().map(drop).map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -586,9 +599,24 @@ pub fn run() {
             app.manage(shared);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![notices, state, meta, load_logs, delete_character, query, export_entries, set_name, open_lodestone])
+        .invoke_handler(tauri::generate_handler![notices, open_homepage, state, meta, load_logs, delete_character, query, export_entries, set_name, open_lodestone])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| eprintln!("Aetherlog stopped: {e}"));
+}
+
+#[cfg(test)]
+mod notices_tests {
+    #[test]
+    fn notices_list_is_well_formed() {
+        let list: serde_json::Value = serde_json::from_str(super::NOTICES).unwrap();
+        let texts = list["texts"].as_array().unwrap().len();
+        let packages = list["packages"].as_array().unwrap();
+        assert!(packages.len() > 100);
+        for p in packages {
+            assert!(p["h"].as_str().unwrap().starts_with("https://"), "{p}");
+            assert!(p["t"].as_array().unwrap().iter().all(|i| (i.as_u64().unwrap() as usize) < texts));
+        }
+    }
 }
 
 #[cfg(test)]

@@ -23,7 +23,7 @@ A read-only desktop viewer for FFXIV logs: Rust (Tauri 2) backend, Vue 3 + Vite 
 | `web/src/glyphs.js` | Stand-in symbols for private-use glyphs and bitmap icons |
 | `web/src/style.css` | The FFXIV-style theme (background, windows, buttons) |
 | `src-tauri/src/dict.rs` | Lookup tables (`autotranslate.json` {text, lookup}, `bitmapicons.json`, `uicolor.json`): `current`/`install`, `load`, `download` (xivapi/ffxiv-datamining sheets and Dalamud's `BitmapFontIcon.cs`, converted in Rust), `status`. They are game text, so they are downloaded to `userdata/dict` on the first start and never compiled in or committed |
-| `THIRD-PARTY-NOTICES.txt`, `tools/make_notices.mjs` (`.ps1`/`.bat`) | Licence texts of the Rust crates (Windows runtime closure) and npm packages that are in the exe, each text printed once with its packages. Committed; compiled into the exe (`notices` command, shown in the about dialog's licence window) and copied next to it by `publish.ps1`, which regenerates it before every build |
+| `THIRD-PARTY-NOTICES.txt`, `tools/make_notices.mjs` (`.ps1`/`.bat`) | Licence texts of the Rust crates (Windows runtime closure) and npm packages that are in the exe, each text printed once with its packages. Committed. `src-tauri/notices.json` is compiled into the exe (`notices` command; `open_homepage` opens one package's stored https address); the about dialog's licence window lists the packages with a licence and homepage link each. Nothing is copied next to the exe. `publish.ps1` regenerates both files before every build |
 | `tools/publish.ps1` | Builds the web front end and the release exe (`tauri build --no-bundle`) and copies `Aetherlog.exe` into `artifacts/` (git-ignored). Refuses to run while a copy of Aetherlog is running |
 | `tools/preview.ps1` | Front end only: starts the Vite dev server in a browser (`--open`) |
 | `web/src/mock.js` | In-browser stand-in backend used by `npm run dev` outside Tauri: 150,000 fictional lines, a fake start-up load and slow large pages. Dev builds only, never shipped |
@@ -39,7 +39,7 @@ A read-only desktop viewer for FFXIV logs: Rust (Tauri 2) backend, Vue 3 + Vite 
 | `state` | load status (`idle/loading/ready/error`), progress, path, count | `get('/api/state')` |
 | `meta` | channel catalog, groups, counts per channel, characters (name, whether guessed), date range, days with line counts, warning and error counts | `get('/api/meta')` |
 | `load_logs(path)` | start loading; an error string if the path is missing or holds no `.log` | `post('/api/load')` |
-| `notices` | the text of `THIRD-PARTY-NOTICES.txt` | `get('/api/notices')` |
+| `notices` | JSON of the bundled packages and licence texts (`src-tauri/notices.json`) | `get('/api/notices')` |
 | `query(params)` | filter and fetch a page; `offset = -1` is the last page; `limit` is 1 to 1,000,000,000 (0 or less means 200); the UI's "all" sends 1,000,000,000 | `post('/api/query')` |
 | `export_entries(params, path)` | write the filtered rows to a `.csv` or `.json` file | `download('/api/export')` (save dialog, then the command) |
 | `set_name(id, name)` | set a character name by hand (empty clears it) | `post('/api/name')` |

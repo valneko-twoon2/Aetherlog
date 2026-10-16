@@ -111,7 +111,10 @@ let manualName = ''
 
 export default {
   async notices() {
-    return 'Aetherlog third-party notices (sample)\n\n' + 'MIT License\n\nCopyright (c) example\n\n'.repeat(60)
+    return JSON.stringify({
+      packages: Array.from({ length: 40 }, (_, i) => ({ n: `sample-package-${i}`, v: `1.${i}.0`, l: 'MIT', h: 'https://example.com', t: [0] })),
+      texts: ['MIT License\n\nCopyright (c) example\n\nPermission is hereby granted, free of charge, ...'],
+    })
   },
   async state() {
     const elapsed = Date.now() - STARTED

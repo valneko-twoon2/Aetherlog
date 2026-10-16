@@ -1,5 +1,8 @@
-// Writes THIRD-PARTY-NOTICES.txt: the licence texts of everything that ends up in the exe
-// (Rust crates for Windows, and the npm packages the front end bundles).
+// Writes the third-party licence notices of everything that ends up in the exe (Rust crates for
+// Windows, and the npm packages the front end bundles):
+//   THIRD-PARTY-NOTICES.txt   shipped next to the exe, each licence text printed once
+//   src-tauri/notices.json    compiled into the exe for the licence window: packages with
+//                             their homepage and indexes into the shared list of texts
 // Run it through tools\make_notices.ps1; tools\publish.ps1 does so before every build.
 import { execFileSync, execSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -9,7 +12,15 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const options = (cwd) => ({ cwd, maxBuffer: 1 << 29, encoding: 'utf8' })
 
-const packages = [] // { name, version, license, dir }
+// Only https addresses are ever handed to the browser.
+const webAddress = (url) => {
+  let u = String(url || '').trim().replace(/^git\+/, '').replace(/\.git$/, '')
+  u = u.replace(/^(git|ssh):\/\/(git@)?/, 'https://').replace(/^git@github\.com:/, 'https://github.com/').replace(/^github:/, 'https://github.com/')
+  if (/^[\w.-]+\/[\w.-]+$/.test(u)) u = `https://github.com/${u}`
+  return u.startsWith('https://') ? u : ''
+}
+
+const packages = [] // { name, version, license, repository, homepage, dir }
 
 // Rust: the runtime dependency closure of the app for the Windows build.
 const meta = JSON.parse(
@@ -30,7 +41,8 @@ while (stack.length) {
 for (const id of seen) {
   if (id === meta.resolve.root) continue
   const p = byId.get(id)
-  packages.push({ name: p.name, version: p.version, license: p.license || '', repository: p.repository || '', dir: dirname(p.manifest_path) })
+  const repository = webAddress(p.repository)
+  packages.push({ name: p.name, version: p.version, license: p.license || '', repository, homepage: webAddress(p.homepage) || repository, dir: dirname(p.manifest_path) })
 }
 
 // npm: production dependencies of the front end (what vite bundles).
@@ -42,8 +54,8 @@ const walk = (deps = {}) => {
       dirs.add(dep.path)
       const pkg = JSON.parse(readFileSync(join(dep.path, 'package.json'), 'utf8'))
       const license = typeof pkg.license === 'string' ? pkg.license : pkg.license?.type || ''
-      const repo = (typeof pkg.repository === 'string' ? pkg.repository : pkg.repository?.url || '').replace(/^git\+|\.git$/g, '')
-      packages.push({ name: pkg.name, version: pkg.version, license, repository: repo, dir: dep.path })
+      const repository = webAddress(typeof pkg.repository === 'string' ? pkg.repository : pkg.repository?.url)
+      packages.push({ name: pkg.name, version: pkg.version, license, repository, homepage: webAddress(pkg.homepage) || repository, dir: dep.path })
     }
     walk(dep.dependencies)
   }
@@ -54,39 +66,44 @@ walk(tree.dependencies)
 const unique = new Map(packages.map((p) => [`${p.name}@${p.version}`, p]))
 packages.length = 0
 packages.push(...unique.values())
+packages.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.version.localeCompare(b.version, 'en', { numeric: true }))
 
 const wanted = /^(licen[sc]e|copying|unlicense|notice|copyright)([-_.].*)?$/i
-const texts = new Map() // normalised text -> { text, items }
-const byRepo = new Map() // repository -> licence texts of its packages
-const missing = []
-for (const p of packages.sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version))) {
+const texts = [] // distinct licence texts
+const textIndex = new Map()
+const intern = (text) => {
+  if (!textIndex.has(text)) textIndex.set(text, texts.push(text) - 1)
+  return textIndex.get(text)
+}
+const used = new Map() // package -> Set of text indexes
+const byRepo = new Map() // repository -> texts of its packages
+for (const p of packages) {
   const files = existsSync(p.dir)
     ? readdirSync(p.dir).filter((f) => wanted.test(f) && !/\.spdx$/i.test(f) && statSync(join(p.dir, f)).isFile() && statSync(join(p.dir, f)).size < 200_000)
     : []
-  if (!files.length) missing.push(p)
+  const own = new Set()
   for (const file of files.sort()) {
     const text = readFileSync(join(p.dir, file), 'utf8').replace(/^﻿/, '').replace(/\r\n?/g, '\n').trim()
-    if (!text) continue
-    if (!texts.has(text)) texts.set(text, { text, items: [] })
-    const item = `${p.name} ${p.version}${p.license ? ` (${p.license})` : ''}`
-    const entry = texts.get(text)
-    if (!entry.items.includes(item)) entry.items.push(item)
-    if (p.repository) byRepo.set(p.repository, new Set([...(byRepo.get(p.repository) || []), entry]))
+    if (text) own.add(intern(text))
   }
+  used.set(p, own)
+  if (own.size && p.repository) byRepo.set(p.repository, new Set([...(byRepo.get(p.repository) || []), ...own]))
 }
 
-// A package without its own licence file is listed under the texts of a sibling from the same
-// repository, or under the shared MPL-2.0 text; the rest are named with the licence they declare.
-const stillMissing = []
-for (const p of missing) {
-  const item = `${p.name} ${p.version}${p.license ? ` (${p.license})` : ''}`
-  const siblings = p.repository && byRepo.get(p.repository)
-  const mpl = p.license === 'MPL-2.0' && [...texts.values()].find((t) => t.text.includes('Mozilla Public License Version 2.0'))
-  const targets = siblings ? [...siblings] : mpl ? [mpl] : []
-  if (targets.length) targets.forEach((t) => t.items.includes(item) || t.items.push(item))
-  else stillMissing.push(p)
+// A package without its own licence file borrows the texts of a sibling from the same repository,
+// or the shared MPL-2.0 text; the rest are listed with the licence they declare.
+const mplText = texts.findIndex((t) => t.includes('Mozilla Public License Version 2.0'))
+const withoutText = []
+for (const p of packages) {
+  const own = used.get(p)
+  if (own.size) continue
+  const borrowed = (p.repository && byRepo.get(p.repository)) || (p.license === 'MPL-2.0' && mplText >= 0 ? [mplText] : [])
+  if (borrowed.size || borrowed.length) borrowed.forEach((i) => own.add(i))
+  else withoutText.push(p)
 }
 
+// ---- THIRD-PARTY-NOTICES.txt: each text once, with the packages that come with it.
+const label = (p) => `${p.name} ${p.version}${p.license ? ` (${p.license})` : ''}`
 const bar = '='.repeat(78)
 let out = `Aetherlog third-party notices
 
@@ -94,11 +111,19 @@ Aetherlog contains the open-source components listed below. Each licence text
 is printed once, followed by the packages that come with it.
 ${bar}
 `
-const sections = [...texts.values()].sort((a, b) => b.items.length - a.items.length || a.items[0].localeCompare(b.items[0]))
+const sections = texts.map((text, index) => ({ text, items: packages.filter((p) => used.get(p).has(index)).map(label) }))
+sections.sort((a, b) => b.items.length - a.items.length || a.items[0].localeCompare(b.items[0]))
 for (const s of sections) out += `\n${s.items.map((i) => `  ${i}`).join('\n')}\n\n${s.text}\n\n${bar}\n`
-if (stillMissing.length) {
+if (withoutText.length) {
   out += `\nPackages that ship no licence file (licence as declared in their metadata):\n\n`
-  out += stillMissing.map((p) => `  ${p.name} ${p.version} (${p.license || "unspecified"}) ${p.repository}`.trimEnd()).join('\n') + '\n'
+  out += withoutText.map((p) => `  ${label(p)} ${p.repository}`.trimEnd()).join('\n') + '\n'
 }
 writeFileSync(join(root, 'THIRD-PARTY-NOTICES.txt'), out)
-console.log(`THIRD-PARTY-NOTICES.txt: ${packages.length} packages, ${sections.length} licence texts, ${stillMissing.length} without a licence file`)
+
+// ---- src-tauri/notices.json: what the licence window lists.
+const json = {
+  packages: packages.map((p) => ({ n: p.name, v: p.version, l: p.license, h: p.homepage, t: [...used.get(p)].sort((a, b) => a - b) })),
+  texts,
+}
+writeFileSync(join(root, 'src-tauri', 'notices.json'), JSON.stringify(json))
+console.log(`${packages.length} packages, ${texts.length} licence texts, ${withoutText.length} without a licence file`)

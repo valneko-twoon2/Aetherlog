@@ -44,6 +44,8 @@ export const post = async (path, body = {}) => {
       return call('query', { params: body })
     case '/api/delete_character':
       return call('delete_character', { id: body.id })
+    case '/api/homepage':
+      return call('open_homepage', { index: body.index })
     case '/api/lodestone':
       return call('open_lodestone', { name: body.name, world: body.world })
     case '/api/name':
