@@ -214,7 +214,6 @@ function save(format) {
       <h2>Aetherlog</h2>
       <p class="ver">バージョン {{ version }}</p>
       <p>FINAL FANTASY XIV のチャットログとシステムログを、読み取り専用で閲覧するツールです。</p>
-      <p>元の .log ファイルには書き込まず、通信も行いません。</p>
       <h3>ライセンス</h3>
       <pre class="license">{{ license }}</pre>
       <p>この許諾はソースコードだけが対象です。表示するゲームの内容は含みません。</p>
