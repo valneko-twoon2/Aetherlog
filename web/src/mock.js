@@ -108,7 +108,6 @@ function select(params) {
 }
 
 let manualName = ''
-let monitoring = true
 let preferences = { animations: true }
 try {
   const saved = JSON.parse(localStorage.getItem('aethelog-preferences') || 'null')
@@ -128,9 +127,8 @@ export default {
       const total = 463
       return { status: 'loading', phase: elapsed < LOAD_MS / 2 ? 'copy' : 'read', progress: [Math.floor((total * (elapsed % (LOAD_MS / 2))) / (LOAD_MS / 2)), total], path: 'C:\\mock\\logs', error: '', total: 0, dict: 'ready', dict_error: '' }
     }
-    return { status: 'ready', phase: 'read', progress: [463, 463], path: 'C:\\mock\\logs', error: '', total: TOTAL, dict: 'ready', dict_error: '', generation: 1, monitoring, refreshing: false, preferences }
+    return { status: 'ready', phase: 'read', progress: [463, 463], path: 'C:\\mock\\logs', error: '', total: TOTAL, dict: 'ready', dict_error: '', generation: 1, refreshing: false, preferences }
   },
-  async set_monitoring({ enabled }) { monitoring = enabled },
   async set_preferences({ preferences: next }) {
     preferences = { animations: next.animations }
     localStorage.setItem('aethelog-preferences', JSON.stringify(preferences))

@@ -31,8 +31,6 @@ export const post = async (path, body = {}) => {
   switch (path) {
     case '/api/load':
       return call('load_logs', { path: body.path, focus: !!body.focus })
-    case '/api/monitoring':
-      return call('set_monitoring', { enabled: !!body.enabled })
     case '/api/preferences':
       return call('set_preferences', { preferences: body })
     case '/api/pick': {

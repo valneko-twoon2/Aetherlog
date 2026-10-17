@@ -255,7 +255,6 @@ struct StateView {
     dict: &'static str,
     dict_error: String,
     generation: usize,
-    monitoring: bool,
     refreshing: bool,
     preferences: preferences::Preferences,
 }
@@ -368,7 +367,6 @@ async fn state(app: State<'_, Arc<AppState>>) -> Result<StateView, String> {
         dict,
         dict_error,
         generation: inner.generation,
-        monitoring: inner.monitoring,
         refreshing: inner.refreshing,
         preferences: inner.preferences,
     })
@@ -434,13 +432,12 @@ async fn load_logs(app: State<'_, Arc<AppState>>, path: String, focus: Option<bo
     if logfile::find_logs(&target)?.is_empty() {
         return Err(".log ファイルが見つかりません".into());
     }
-    Ok(serde_json::json!({ "started": app.inner().start_load(target, true, focus.unwrap_or(false)) }))
-}
-
-#[tauri::command]
-async fn set_monitoring(app: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), String> {
-    lock(&app.inner).monitoring = enabled;
-    Ok(())
+    let started = app.inner().start_load(target, true, focus.unwrap_or(false));
+    if started {
+        // A manual reload also resumes the automatic import that deleting a character paused.
+        lock(&app.inner).monitoring = true;
+    }
+    Ok(serde_json::json!({ "started": started }))
 }
 
 #[tauri::command]
@@ -749,7 +746,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![notices, open_homepage, state, meta, load_logs, set_monitoring, set_preferences, delete_character, query, export_entries, set_name, open_lodestone])
+        .invoke_handler(tauri::generate_handler![notices, open_homepage, state, meta, load_logs, set_preferences, delete_character, query, export_entries, set_name, open_lodestone])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| eprintln!("Aethelog stopped: {e}"));
 }

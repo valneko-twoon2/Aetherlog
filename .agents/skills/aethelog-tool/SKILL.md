@@ -96,7 +96,7 @@ Delete `userdata/dict` and start the app to download the tables again (`start_di
 - The window frame follows the viewport width (no maximum width; side margins use `clamp`).
 - Page size defaults to all and is chosen from a selector, not typed (50 up to all). A "loading" popup appears only when a query is still running after 400 ms.
 - Background particles drift and twinkle (CSS animation; disabled for reduced motion or the saved animation preference). The menu offers animation on/off; there is no import interval setting. Preferences are restored on launch; monitoring itself starts enabled.
-- Automatic import (`start_monitor` in `lib.rs`) is event driven: a `notify` watch on the log location triggers a background import 1 second after the last `.log` change, plus a rescan every 60 seconds for missed notifications. Resuming monitoring imports at once. Do not go back to fast polling: the game writes logs only at 1,000 lines or logout (see the `ffxiv-log-format` skill).
+- Automatic import (`start_monitor` in `lib.rs`) is event driven: a `notify` watch on the log location triggers a background import 1 second after the last `.log` change, plus a rescan every 60 seconds for missed notifications. There is no on/off switch in the UI; deleting a character pauses it (so the rescan does not restore what was deleted) and the next manual `load_logs` resumes it. Do not go back to fast polling: the game writes logs only at 1,000 lines or logout (see the `ffxiv-log-format` skill).
 - Characters are chosen by name; show the ID only when no name could be determined.
 
 ## 7. Known limits

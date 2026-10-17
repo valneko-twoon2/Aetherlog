@@ -11,11 +11,10 @@ test('live updates retain filters and paging, and unchanged generations do not r
   let total = 100
   let metaCalls = 0
   let queries = 0
-  let monitoring = true
   let preferences = { animations: true }
   let saveFails = false
   const get = async (path) => {
-    if (path === '/api/state') return { status: 'ready', generation, monitoring, preferences, error: '' }
+    if (path === '/api/state') return { status: 'ready', generation, preferences, error: '' }
     metaCalls++
     const counts = generation > 1 ? { 14: total - 1, 10: 1 } : { 14: total }
     return {
@@ -24,7 +23,6 @@ test('live updates retain filters and paging, and unchanged generations do not r
     }
   }
   const post = async (path, body) => {
-    if (path === '/api/monitoring') { monitoring = body.enabled; return }
     if (path === '/api/preferences') {
       if (saveFails) throw new Error('Save failed')
       preferences = { ...body }
@@ -77,14 +75,11 @@ test('live updates retain filters and paging, and unchanged generations do not r
   total = 151
   await log.poll()
   assert.equal(log.view.offset, 150, 'following the latest page advances when a page fills')
-  await log.setMonitoring(false)
-  assert.equal(log.state.monitoring, false)
   await log.setPreferences({ animations: false })
   assert.equal(log.state.preferences.animations, false)
   saveFails = true
   await assert.rejects(log.setPreferences({ animations: true }), /Save failed/)
   assert.equal(log.state.preferences.animations, false, 'failed saves preserve the previous setting')
   await log.poll()
-  assert.equal(log.state.monitoring, false)
   assert.equal(log.state.preferences.animations, false)
 })

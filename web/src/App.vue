@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ChatWindow from './components/ChatWindow.vue'
 import { download, get, onDrop, post } from './api.js'
-import { cancelLoad, deleteCharacter, exportBody, filters, meta, poll, reload, renameCharacter, setMonitoring, setPreferences, startLoad, state, view } from './useLog.js'
+import { cancelLoad, deleteCharacter, exportBody, filters, meta, poll, reload, renameCharacter, setPreferences, startLoad, state, view } from './useLog.js'
 
 const path = ref('')
 const menu = ref(false)
@@ -130,6 +130,12 @@ async function confirmDelete() {
 const loading = computed(() => state.status === 'loading')
 const percent = computed(() => (state.progress[1] ? Math.round((state.progress[0] / state.progress[1]) * 100) : 0))
 const current = computed(() => meta.value?.characters.find((c) => c.id === filters.character))
+// The name box edits a draft: binding it straight to the stored name would put the old text back
+// whenever the page re-renders (the state is polled), erasing what is being typed.
+const nameDraft = ref('')
+watch(() => `${current.value?.id}\n${current.value?.name || ''}`, () => {
+  nameDraft.value = current.value?.name || ''
+}, { immediate: true })
 
 // focus: the log was picked or dropped by hand, so show its character.
 async function load(focus = false) {
@@ -189,7 +195,7 @@ function save(format) {
             </select>
           </label>
           <label v-if="current" class="rename">名前（自動で判別できない場合は入力）
-            <input :key="current.id" class="ff-input" :value="current.name" :placeholder="current.id" maxlength="40" @change="renameCharacter(current.id, $event.target.value).catch((e) => (message = e.message))" />
+            <input v-model="nameDraft" class="ff-input" :placeholder="current.id" maxlength="40" @change="renameCharacter(current.id, nameDraft).catch((e) => (message = e.message))" />
           </label>
           <div v-if="current" class="del-row">
             <button type="button" class="ff-btn danger" :disabled="loading || state.refreshing" @click="askDelete">このキャラクターのログを削除</button>
@@ -206,7 +212,6 @@ function save(format) {
             <button class="ff-btn primary" :disabled="loading">再読み込み</button>
           </div>
         </form>
-        <label class="check auto-save"><input type="checkbox" :checked="state.monitoring" @change="setMonitoring($event.target.checked).catch((e) => (message = e.message))" /> ログを自動保存・更新する</label>
       </section>
       <section>
         <h2>表示設定</h2>
