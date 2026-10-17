@@ -109,6 +109,11 @@ function select(params) {
 
 let manualName = ''
 let monitoring = true
+let preferences = { animations: true, refresh_seconds: 1 }
+try {
+  const saved = JSON.parse(localStorage.getItem('aethelog-preferences') || 'null')
+  if (typeof saved?.animations === 'boolean' && Number.isInteger(saved.refresh_seconds) && saved.refresh_seconds >= 1 && saved.refresh_seconds <= 60) preferences = saved
+} catch { /* Missing or invalid browser storage uses the same defaults as the desktop app. */ }
 
 export default {
   async notices() {
@@ -123,9 +128,15 @@ export default {
       const total = 463
       return { status: 'loading', phase: elapsed < LOAD_MS / 2 ? 'copy' : 'read', progress: [Math.floor((total * (elapsed % (LOAD_MS / 2))) / (LOAD_MS / 2)), total], path: 'C:\\mock\\logs', error: '', total: 0, dict: 'ready', dict_error: '' }
     }
-    return { status: 'ready', phase: 'read', progress: [463, 463], path: 'C:\\mock\\logs', error: '', total: TOTAL, dict: 'ready', dict_error: '', generation: 1, monitoring, refreshing: false }
+    return { status: 'ready', phase: 'read', progress: [463, 463], path: 'C:\\mock\\logs', error: '', total: TOTAL, dict: 'ready', dict_error: '', generation: 1, monitoring, refreshing: false, preferences }
   },
   async set_monitoring({ enabled }) { monitoring = enabled },
+  async set_preferences({ preferences: next }) {
+    if (!Number.isInteger(next.refresh_seconds) || next.refresh_seconds < 1 || next.refresh_seconds > 60) throw new Error('Invalid refresh interval')
+    localStorage.setItem('aethelog-preferences', JSON.stringify(next))
+    preferences = { ...next }
+    return preferences
+  },
   async meta() {
     rows || build()
     const counts = {}

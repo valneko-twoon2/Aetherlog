@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Aetherlog",
-  "mainBinaryName": "Aetherlog",
+  "productName": "Aethelog",
+  "mainBinaryName": "Aethelog",
   "version": "1.0.0",
-  "identifier": "dev.aetherlog.app",
+  "identifier": "dev.aethelog.app",
   "build": {
     "frontendDist": "../web/dist",
     "devUrl": "http://localhost:5173"
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Aetherlog",
+        "title": "Aethelog",
         "width": 1280,
         "height": 820,
         "minWidth": 900,

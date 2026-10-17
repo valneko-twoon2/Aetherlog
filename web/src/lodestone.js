@@ -1,7 +1,7 @@
 // Ctrl+click on a player name opens that name on the Lodestone in the system browser.
 import { post } from './api.js'
 
-export const openPage = (player) => post('/api/lodestone', player).catch((e) => console.error('[aetherlog]', e))
+export const openPage = (player) => post('/api/lodestone', player).catch((e) => console.error('[aethelog]', e))
 
 // CSS cannot see the Ctrl key, so mirror it on <html> for the pointer style.
 const mark = (e) => document.documentElement.classList.toggle('ctrl', e.ctrlKey || e.metaKey)

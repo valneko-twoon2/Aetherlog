@@ -1,4 +1,4 @@
-//! Aetherlog backend: loads FFXIV logs read-only and answers the Vue front end
+//! Aethelog backend: loads FFXIV logs read-only and answers the Vue front end
 //! through Tauri commands.  The only network use is the one-time download of the lookup
 //! tables (`dict.rs`) and the fixed Lodestone address handed to the system browser.
 
@@ -6,6 +6,7 @@ mod channels;
 mod dict;
 mod lodestone;
 mod logfile;
+mod preferences;
 mod sestring;
 
 use logfile::{Entry, Filter};
@@ -48,6 +49,7 @@ struct Inner {
     cache: Option<(CacheKey, Arc<Vec<u32>>)>,
     monitoring: bool,
     refreshing: bool,
+    preferences: preferences::Preferences,
 }
 
 pub struct AppState {
@@ -187,7 +189,7 @@ impl AppState {
                 inner.error = "読み込み中に内部エラーが発生しました".to_owned();
             }
         });
-        if !background && std::env::var_os("AETHERLOG_LOGS").is_none() {
+        if !background && std::env::var_os("AETHELOG_LOGS").is_none() {
             let _ = std::fs::create_dir_all(&self.data_dir)
                 .and_then(|()| std::fs::write(self.data_dir.join("last_path.txt"), self.path_text()));
         }
@@ -255,6 +257,7 @@ struct StateView {
     generation: usize,
     monitoring: bool,
     refreshing: bool,
+    preferences: preferences::Preferences,
 }
 
 #[derive(Serialize)]
@@ -367,6 +370,7 @@ async fn state(app: State<'_, Arc<AppState>>) -> Result<StateView, String> {
         generation: inner.generation,
         monitoring: inner.monitoring,
         refreshing: inner.refreshing,
+        preferences: inner.preferences,
     })
 }
 
@@ -437,6 +441,14 @@ async fn load_logs(app: State<'_, Arc<AppState>>, path: String, focus: Option<bo
 async fn set_monitoring(app: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), String> {
     lock(&app.inner).monitoring = enabled;
     Ok(())
+}
+
+#[tauri::command]
+async fn set_preferences(app: State<'_, Arc<AppState>>, preferences: preferences::Preferences) -> Result<preferences::Preferences, String> {
+    let mut inner = lock(&app.inner);
+    preferences.save(&app.data_dir)?;
+    inner.preferences = preferences;
+    Ok(preferences)
 }
 
 /// Deletes the archived logs of one character and shows what is left. The game's own logs are
@@ -547,14 +559,19 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
 /// Earlier versions kept their data in the per-user app folders; bring it along once.
 fn migrate_legacy(app: &tauri::App, data_dir: &Path) {
     let _ = std::fs::create_dir_all(data_dir);
-    if let Ok(old) = app.path().app_config_dir() {
+    // Keep the former identifier only as an input for migration after the rename.
+    let config_dirs = app.path().app_config_dir().ok().into_iter()
+        .chain(std::env::var_os("APPDATA").map(|p| PathBuf::from(p).join("dev.aetherlog.app")));
+    for old in config_dirs {
         for name in ["character_names.json", "last_path.txt"] {
             if old.join(name).is_file() && !data_dir.join(name).exists() {
                 let _ = std::fs::copy(old.join(name), data_dir.join(name));
             }
         }
     }
-    if let Ok(old) = app.path().app_local_data_dir().map(|d| d.join("archive")) {
+    let archive_dirs = app.path().app_local_data_dir().ok().map(|d| d.join("archive")).into_iter()
+        .chain(std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("dev.aetherlog.app").join("archive")));
+    for old in archive_dirs {
         let new = data_dir.join("archive");
         if old.is_dir() && !new.exists() && std::fs::rename(&old, &new).is_err() {
             // Different drive: copy instead and leave the old folder in place.
@@ -601,11 +618,21 @@ fn start_dictionary(state: &Arc<AppState>) {
 /// One worker polls sources; start_load_mode serializes it with all other archive work.
 fn start_monitor(state: &Arc<AppState>) {
     let weak = Arc::downgrade(state);
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        let Some(state) = weak.upgrade() else { break };
-        let path = lock(&state.inner).path.clone();
-        state.start_load_mode(path, true, false, true);
+    std::thread::spawn(move || {
+        let mut last = std::time::Instant::now();
+        loop {
+            // Short ticks let interval changes take effect without waiting for an old long interval.
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let Some(state) = weak.upgrade() else { break };
+            let (path, seconds) = {
+                let inner = lock(&state.inner);
+                (inner.path.clone(), inner.preferences.refresh_seconds)
+            };
+            if last.elapsed() >= std::time::Duration::from_secs(seconds)
+                && state.start_load_mode(path, true, false, true) {
+                last = std::time::Instant::now();
+            }
+        }
     });
 }
 
@@ -641,7 +668,7 @@ fn fix_window_icon(window: &tauri::WebviewWindow) {
 
 fn default_log_root(app: &tauri::App, data_dir: &Path) -> PathBuf {
     // An explicit override, handy for demos and development.
-    if let Some(root) = std::env::var_os("AETHERLOG_LOGS").map(PathBuf::from).filter(|p| p.exists()) {
+    if let Some(root) = std::env::var_os("AETHELOG_LOGS").map(PathBuf::from).filter(|p| p.exists()) {
         return root;
     }
     if let Ok(saved) = std::fs::read_to_string(data_dir.join("last_path.txt")) {
@@ -661,14 +688,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let overridden = std::env::var_os("AETHERLOG_DATA");
+            let overridden = std::env::var_os("AETHELOG_DATA");
             let data_dir = overridden.clone().map(PathBuf::from).unwrap_or_else(|| exe_dir().join("userdata"));
             if overridden.is_none() {
                 migrate_legacy(app, &data_dir);
             }
             let root = default_log_root(app, &data_dir);
+            let preferences = preferences::Preferences::load(&data_dir);
             let shared = Arc::new(AppState {
-                inner: Mutex::new(Inner { path: root.clone(), monitoring: true, ..Inner::default() }),
+                inner: Mutex::new(Inner { path: root.clone(), monitoring: true, preferences, ..Inner::default() }),
                 progress: [AtomicUsize::new(0), AtomicUsize::new(0)],
                 archive_dir: data_dir.join("archive"),
                 data_dir,
@@ -686,9 +714,9 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![notices, open_homepage, state, meta, load_logs, set_monitoring, delete_character, query, export_entries, set_name, open_lodestone])
+        .invoke_handler(tauri::generate_handler![notices, open_homepage, state, meta, load_logs, set_monitoring, set_preferences, delete_character, query, export_entries, set_name, open_lodestone])
         .run(tauri::generate_context!())
-        .unwrap_or_else(|e| eprintln!("Aetherlog stopped: {e}"));
+        .unwrap_or_else(|e| eprintln!("Aethelog stopped: {e}"));
 }
 
 #[cfg(test)]
@@ -772,7 +800,7 @@ mod metadata_tests {
         let app = AppState {
             inner: Mutex::new(Inner { entries: Arc::new(entries), ..Inner::default() }),
             progress: [AtomicUsize::new(0), AtomicUsize::new(0)],
-            data_dir: std::env::temp_dir().join("aetherlog-metadata-test-missing"),
+            data_dir: std::env::temp_dir().join("aethelog-metadata-test-missing"),
             archive_dir: PathBuf::new(),
             source_cache: Mutex::new(logfile::SourceCache::default()),
         };

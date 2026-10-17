@@ -1,16 +1,16 @@
 [package]
-name = "aetherlog"
+name = "aethelog"
 version = "1.0.0"
 license = "MIT"
 description = "FF14 chat / system log viewer (read-only)"
 edition = "2021"
 
 [[bin]]
-name = "Aetherlog"
+name = "Aethelog"
 path = "src/main.rs"
 
 [lib]
-name = "aetherlog_lib"
+name = "aethelog_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]

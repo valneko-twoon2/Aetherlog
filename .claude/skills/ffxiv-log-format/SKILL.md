@@ -1,11 +1,11 @@
 ---
 name: ffxiv-log-format
-description: Use when working with FFXIV binary chat logs (.log), including the file layout, SeString control sequences (0x02..0x03), auto-translate phrases, bitmap icons and private-use glyphs, and chat channel kinds (low 7 bits of the code). Consult it when implementing, fixing or verifying log parsing, and to avoid re-analysing the logs. For the tool's layout, build steps and entry files use the aetherlog-tool skill.
+description: Use when working with FFXIV binary chat logs (.log), including the file layout, SeString control sequences (0x02..0x03), auto-translate phrases, bitmap icons and private-use glyphs, and chat channel kinds (low 7 bits of the code). Consult it when implementing, fixing or verifying log parsing, and to avoid re-analysing the logs. For the tool's layout, build steps and entry files use the aethelog-tool skill.
 ---
 
 # FFXIV binary log format
 
-Verified against real logs (450,000 lines, 463 files). **Do not re-analyse the game logs; start here.** This skill covers the format only; where the code lives and how the tool is built is in the `aetherlog-tool` skill. If the implementation disagrees with this note, the implementation is right.
+Verified against real logs (450,000 lines, 463 files). **Do not re-analyse the game logs; start here.** This skill covers the format only; where the code lives and how the tool is built is in the `aethelog-tool` skill. If the implementation disagrees with this note, the implementation is right.
 
 ## 1. File and record layout
 
@@ -91,7 +91,7 @@ In the log they are plain UTF-8 private-use characters that depend on the game's
 | 61 NPC dialogue, 62 loot, 64 progress/learning, 65 lot, 66 crafting, 67 gathering, 68 NPC announcements | event | event |
 | 41 damage, 42 miss, 43 cast, 44 item, 45 HP recovery, 46 buff applied, 47 debuff applied, 48 buff removed, 49 debuff removed | battle | battle |
 
-Note: this table is **decimal**. Where hex is used (for example `0E` = 14 = Party) convert. Names, colours and line layouts live in the implementation's channel catalog (see the `aetherlog-tool` skill), which is authoritative.
+Note: this table is **decimal**. Where hex is used (for example `0E` = 14 = Party) convert. Names, colours and line layouts live in the implementation's channel catalog (see the `aethelog-tool` skill), which is authoritative.
 
 ## 6. Pitfalls and verification
 

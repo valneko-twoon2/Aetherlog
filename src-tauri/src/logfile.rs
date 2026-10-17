@@ -726,7 +726,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("aetherlog-test-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("aethelog-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -791,11 +791,11 @@ pub(crate) mod tests {
         assert!(!valid_folder_id("FFXIV_CHR"));
     }
 
-    /// Parity check against real logs: `AETHERLOG_LOGS=<dir> cargo test real_logs -- --ignored --nocapture`.
+    /// Parity check against real logs: `AETHELOG_LOGS=<dir> cargo test real_logs -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn real_logs_summary() {
-        let root = PathBuf::from(std::env::var("AETHERLOG_LOGS").expect("AETHERLOG_LOGS"));
+        let root = PathBuf::from(std::env::var("AETHELOG_LOGS").expect("AETHELOG_LOGS"));
         let started = std::time::Instant::now();
         let loaded = load_logs(&root, |_, _| {}).unwrap();
         let chars: usize = loaded.entries.iter().map(|e| e.message.chars().count() + e.sender.chars().count()).sum();

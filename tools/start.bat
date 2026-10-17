@@ -1,13 +1,13 @@
 @echo off
 cd /d "%~dp0.."
-if exist "artifacts\Aetherlog.exe" (
-  start "" "artifacts\Aetherlog.exe"
+if exist "artifacts\Aethelog.exe" (
+  start "" "artifacts\Aethelog.exe"
   exit /b 0
 )
-if exist "src-tauri\target\release\Aetherlog.exe" (
-  start "" "src-tauri\target\release\Aetherlog.exe"
+if exist "src-tauri\target\release\Aethelog.exe" (
+  start "" "src-tauri\target\release\Aethelog.exe"
   exit /b 0
 )
-echo Aetherlog.exe is not built yet. Run: powershell -File tools\publish.ps1
+echo Aethelog.exe is not built yet. Run: powershell -File tools\publish.ps1
 pause
 exit /b 1

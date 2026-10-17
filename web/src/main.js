@@ -7,9 +7,9 @@ import App from './App.vue'
 const app = createApp(App)
 
 // A bug in one component or promise must not take the window down; log it and carry on.
-app.config.errorHandler = (err) => console.error('[aetherlog]', err)
-window.addEventListener('error', (e) => { console.error('[aetherlog]', e.error || e.message); e.preventDefault() })
-window.addEventListener('unhandledrejection', (e) => { console.error('[aetherlog]', e.reason); e.preventDefault() })
+app.config.errorHandler = (err) => console.error('[aethelog]', err)
+window.addEventListener('error', (e) => { console.error('[aethelog]', e.error || e.message); e.preventDefault() })
+window.addEventListener('unhandledrejection', (e) => { console.error('[aethelog]', e.reason); e.preventDefault() })
 
 // Never navigate away from the app (dropped files, stray links) or open a context menu onto the shell.
 window.addEventListener('dragover', (e) => e.preventDefault())

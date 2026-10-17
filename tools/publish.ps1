@@ -1,12 +1,13 @@
 <#
 .SYNOPSIS
-  Builds Aetherlog in release mode and publishes it to artifacts.
+  Builds Aethelog in release mode and publishes it to artifacts.
 
 .DESCRIPTION
   1. Builds the web front end (npm run build).
   2. Regenerates the licence notices compiled into the exe (tools\make_notices.ps1).
   3. Builds the Tauri app without an installer (tauri build --no-bundle).
-  4. Copies Aetherlog.exe into <repo>\artifacts, leaving artifacts\userdata alone.
+  4. Copies Aethelog.exe into <repo>\artifacts, leaving artifacts\userdata alone.
+  5. Creates Aethelog_v<version>.zip with only the executable.
 
   Run it from anywhere:  powershell -File tools\publish.ps1
   Honors CARGO_TARGET_DIR when it is set (use an absolute path).
@@ -20,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $web = Join-Path $root 'web'
 $targetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $root 'src-tauri\target' }
-$built = Join-Path $targetDir 'release\Aetherlog.exe'
+$built = Join-Path $targetDir 'release\Aethelog.exe'
 $out = Join-Path $root 'artifacts'
 
 function Invoke-Step([string]$Title, [scriptblock]$Action) {
@@ -30,9 +31,9 @@ function Invoke-Step([string]$Title, [scriptblock]$Action) {
 }
 
 # A running copy (from the build folder or the published folder) locks its executable.
-$running = Get-Process Aetherlog -ErrorAction SilentlyContinue |
+$running = Get-Process Aethelog,Aetherlog -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -eq $built -or $_.Path.StartsWith($out, [StringComparison]::OrdinalIgnoreCase) }
-if ($running) { throw 'Aetherlog is running. Close it and run this script again.' }
+if ($running) { throw 'Aethelog is running. Close it and run this script again.' }
 
 Push-Location $web
 try {
@@ -58,9 +59,20 @@ if (-not (Test-Path $built)) { throw "Build output not found: $built" }
 # Only the executable is replaced: $out\userdata (the log archive, names) must survive.
 New-Item -ItemType Directory -Force $out | Out-Null
 # Removing first makes the file name take the new capitalisation, as Windows keeps the old one on overwrite.
-$target = Join-Path $out 'Aetherlog.exe'
+$target = Join-Path $out 'Aethelog.exe'
 Remove-Item $target -Force -ErrorAction SilentlyContinue
 Copy-Item $built $target -Force
+
+# Replace the previous product's executable only after the new one is ready.
+$legacyTarget = Join-Path $out 'Aetherlog.exe'
+if (Test-Path -LiteralPath $legacyTarget) { Remove-Item -LiteralPath $legacyTarget -Force }
+
+# Distribute only the executable; user archives and preferences stay on this machine.
+$version = (Get-Content -LiteralPath (Join-Path $root 'src-tauri\tauri.conf.json') -Raw | ConvertFrom-Json).version
+$zip = Join-Path $out "Aethelog_v$version.zip"
+Compress-Archive -LiteralPath $target -DestinationPath $zip -Force
+$legacyZip = Join-Path $out "Aetherlog_v$version.zip"
+if (Test-Path -LiteralPath $legacyZip) { Remove-Item -LiteralPath $legacyZip -Force }
 
 Write-Host "Published to $out" -ForegroundColor Green
 Get-ChildItem $out | Format-Table Name, Length -AutoSize

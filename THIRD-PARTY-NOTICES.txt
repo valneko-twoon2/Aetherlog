@@ -1,6 +1,6 @@
-Aetherlog third-party notices
+Aethelog third-party notices
 
-Aetherlog contains the open-source components listed below. Each licence text
+Aethelog contains the open-source components listed below. Each licence text
 is printed once, followed by the packages that come with it.
 ==============================================================================
 

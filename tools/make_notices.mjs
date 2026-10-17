@@ -107,9 +107,9 @@ for (const p of packages) {
 // ---- THIRD-PARTY-NOTICES.txt: each text once, with the packages that come with it.
 const label = (p) => `${p.name} ${p.version}${p.license ? ` (${p.license})` : ''}`
 const bar = '='.repeat(78)
-let out = `Aetherlog third-party notices
+let out = `Aethelog third-party notices
 
-Aetherlog contains the open-source components listed below. Each licence text
+Aethelog contains the open-source components listed below. Each licence text
 is printed once, followed by the packages that come with it.
 ${bar}
 `

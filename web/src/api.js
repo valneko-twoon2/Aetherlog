@@ -33,6 +33,8 @@ export const post = async (path, body = {}) => {
       return call('load_logs', { path: body.path, focus: !!body.focus })
     case '/api/monitoring':
       return call('set_monitoring', { enabled: !!body.enabled })
+    case '/api/preferences':
+      return call('set_preferences', { preferences: body })
     case '/api/pick': {
       if (!inTauri) return { path: 'C:/mock/logs' }
       const picked = await open(

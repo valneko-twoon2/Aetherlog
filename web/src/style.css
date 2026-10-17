@@ -232,6 +232,16 @@ body::after { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.or
 .wait-pop small { color: var(--muted); }
 .wait-pop .gauge { width: 260px; }
 .spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid #ffffff22; border-top-color: var(--gold); animation: spin 0.9s linear infinite; }
+html[data-animations="off"] *,
+html[data-animations="off"] *::before,
+html[data-animations="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---- your own lines ---- */

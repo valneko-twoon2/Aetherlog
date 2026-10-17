@@ -44,7 +44,7 @@ if ($Version -eq $current) { Write-Host 'Already at that version.'; return }
 
 Set-First 'src-tauri\tauri.conf.json' '(^\s*"version"\s*:\s*")[^"]+(")' $Version
 Set-First 'src-tauri\Cargo.toml' '(^version\s*=\s*")[^"]+(")' $Version
-Set-First 'src-tauri\Cargo.lock' '(^name = "aetherlog"\r?\nversion = ")[^"]+(")' $Version
+Set-First 'src-tauri\Cargo.lock' '(^name = "aethelog"\r?\nversion = ")[^"]+(")' $Version
 Set-First 'web\package.json' '(^\s*"version"\s*:\s*")[^"]+(")' $Version
 
 # package-lock.json repeats the version for the root package.

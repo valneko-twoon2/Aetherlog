@@ -2,12 +2,31 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ChatWindow from './components/ChatWindow.vue'
 import { download, get, onDrop, post } from './api.js'
-import { cancelLoad, deleteCharacter, exportBody, filters, meta, poll, reload, renameCharacter, setMonitoring, startLoad, state, view } from './useLog.js'
+import { cancelLoad, deleteCharacter, exportBody, filters, meta, poll, reload, renameCharacter, setMonitoring, setPreferences, startLoad, state, view } from './useLog.js'
 
 const path = ref('')
 const menu = ref(false)
 const exporting = ref(false)
 const message = ref('')
+const preferencesBusy = ref(false)
+const refreshIntervals = [1, 2, 5, 10, 30, 60]
+watch(() => state.preferences.animations, (enabled) => {
+  document.documentElement.dataset.animations = enabled ? 'on' : 'off'
+}, { immediate: true })
+
+async function savePreferences(changes, event) {
+  preferencesBusy.value = true
+  message.value = ''
+  try {
+    await setPreferences(changes)
+  } catch (e) {
+    message.value = e.message
+    if (event.target.type === 'checkbox') event.target.checked = state.preferences.animations
+    else event.target.value = state.preferences.refresh_seconds
+  } finally {
+    preferencesBusy.value = false
+  }
+}
 // Injected by vite.config.js from package.json.
 const version = __APP_VERSION__
 const aboutDlg = ref(null)
@@ -149,7 +168,7 @@ function save(format) {
 <template>
   <div class="app" @keydown.esc="menu = false; exporting = false">
     <header class="topbar">
-      <h1 class="brand"><button type="button" class="brand-about" aria-label="Aetherlog について" aria-haspopup="dialog" @click="menu = false; exporting = false; aboutDlg.showModal()">Aetherlog</button></h1>
+      <h1 class="brand"><button type="button" class="brand-about" aria-label="Aethelog について" aria-haspopup="dialog" @click="menu = false; exporting = false; aboutDlg.showModal()">Aethelog</button></h1>
       <input v-model="filters.query" class="ff-input search" type="search" placeholder="発言者・本文を検索" aria-label="検索" />
       <div class="export">
         <button class="ff-btn" :disabled="!meta" aria-haspopup="true" :aria-expanded="exporting" @click="menu = false; exporting = !exporting">エクスポート ▾</button>
@@ -189,11 +208,20 @@ function save(format) {
             <button class="ff-btn primary" :disabled="loading">再読み込み</button>
           </div>
         </form>
-        <label class="check"><input type="checkbox" :checked="state.monitoring" @change="setMonitoring($event.target.checked).catch((e) => (message = e.message))" /> ログを自動保存・更新する（約1秒ごと）</label>
+        <label class="check"><input type="checkbox" :checked="state.monitoring" @change="setMonitoring($event.target.checked).catch((e) => (message = e.message))" /> ログを自動保存・更新する</label>
+        <label>自動更新の間隔
+          <select class="ff-input" :value="state.preferences.refresh_seconds" :disabled="preferencesBusy" @change="savePreferences({ refresh_seconds: Number($event.target.value) }, $event)">
+            <option v-for="seconds in refreshIntervals" :key="seconds" :value="seconds">{{ seconds }}秒</option>
+          </select>
+        </label>
         <p class="live-help">同じログへの追記は、保存済みのファイルに追加します。ゲームがファイルに書き出した内容が対象です。</p>
       </section>
+      <section>
+        <h2>表示設定</h2>
+        <label class="check"><input type="checkbox" :checked="state.preferences.animations" :disabled="preferencesBusy" @change="savePreferences({ animations: $event.target.checked }, $event)" /> アニメーションを有効にする</label>
+      </section>
       <section class="end">
-        <button type="button" class="link-btn" @click="menu = false; aboutDlg.showModal()">Aetherlog について</button>
+        <button type="button" class="link-btn" @click="menu = false; aboutDlg.showModal()">Aethelog について</button>
       </section>
     </div>
 
@@ -237,7 +265,7 @@ function save(format) {
     <div v-if="dragging" class="drop-hint" aria-hidden="true">ここにドロップして、ログを読み込みます</div>
 
     <dialog ref="aboutDlg" class="about-pop" @pointerdown="aboutClose.down" @click="aboutClose.click">
-      <h2>Aetherlog</h2>
+      <h2>Aethelog</h2>
       <p class="ver">バージョン {{ version }}</p>
       <p>FINAL FANTASY XIV のチャットログとシステムログを、読み取り専用で閲覧するツールです。</p>
       <h3>ライセンス</h3>

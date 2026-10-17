@@ -80,7 +80,7 @@ pub fn download(dir: &Path) -> Result<Dict, String> {
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(15))
         .timeout_read(Duration::from_secs(60))
-        .user_agent("Aetherlog")
+        .user_agent("Aethelog")
         .build();
     let fetch = |url: &str| -> Result<String, String> {
         let response = agent.get(url).call().map_err(|e| format!("{url}: {e}"))?;
@@ -328,7 +328,7 @@ mod tests {
     #[test]
     #[ignore]
     fn downloads_the_real_tables() {
-        let dir = std::env::temp_dir().join("aetherlog-dict-test");
+        let dir = std::env::temp_dir().join("aethelog-dict-test");
         let _ = std::fs::remove_dir_all(&dir);
         let fresh = download(&dir).unwrap();
         assert!(fresh.auto.text.len() > 100 && !fresh.colors.is_empty() && !fresh.icons.is_empty());

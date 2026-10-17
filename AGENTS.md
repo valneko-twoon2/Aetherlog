@@ -2,7 +2,7 @@
 
 Rules for AI agents and contributors working in this repository. Read the skills before changing code (Codex discovers the identical copies under `.agents/skills/`):
 
-- `.claude/skills/aetherlog-tool/SKILL.md`: tool layout, Tauri commands, build and test steps, product constraints.
+- `.claude/skills/aethelog-tool/SKILL.md`: tool layout, Tauri commands, build and test steps, product constraints.
 - `.claude/skills/ffxiv-log-format/SKILL.md`: the FFXIV binary log format. Do not re-derive it from the game logs.
 
 ## Language policy
