@@ -103,22 +103,31 @@ async function measure() {
 
 const unpin = () => {
   pinned = false
+  view.followLatest = false
 }
 
 function onScroll() {
   const el = scroller.value
   // Scrolled away from the newest line by any means (scrollbar, keys, wheel): stop following it.
   if (pinned && el && el.scrollHeight - el.clientHeight - el.scrollTop > 100) pinned = false
+  view.followLatest = pinned
   update()
 }
 
 watch(() => view.serial, async () => {
+  const scrollTop = scroller.value?.scrollTop || 0
+  const anchor = heights.find(Math.max(0, scrollTop - PAD))
+  const within = scrollTop - PAD - heights.offset(anchor)
+  const follow = !view.preservePosition || pinned
   heights = new HeightIndex(view.count, EST)
-  pinned = true
+  pinned = follow
+  view.followLatest = pinned
   rev.value++
   Object.assign(range, { first: 0, last: -1 })
   await nextTick()
-  if (scroller.value) scroller.value.scrollTop = view.newestFirst ? 0 : scroller.value.scrollHeight
+  if (scroller.value) scroller.value.scrollTop = follow
+    ? (view.newestFirst ? 0 : scroller.value.scrollHeight)
+    : PAD + heights.offset(Math.min(anchor, Math.max(0, view.count - 1))) + within
   update()
 })
 watch(items, async () => {

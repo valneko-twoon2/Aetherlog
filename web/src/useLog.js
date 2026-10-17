@@ -1,7 +1,7 @@
 import { computed, markRaw, reactive, ref, watch } from 'vue'
 import { get, post } from './api.js'
 
-export const state = reactive({ status: 'idle', phase: '', progress: [0, 0], path: '', error: '', total: 0, focus: '', dict: '', dict_error: '' })
+export const state = reactive({ status: 'idle', phase: '', progress: [0, 0], path: '', error: '', total: 0, focus: '', dict: '', dict_error: '', generation: 0, monitoring: true, refreshing: false })
 export const meta = ref(null)
 export const tab = ref('chat')
 export const selected = ref(new Set())
@@ -108,7 +108,7 @@ export function cancelLoad() {
   cancelled = true
 }
 
-export async function reload(offset = 0) {
+export async function reload(offset = 0, preservePosition = false) {
   const mine = ++token
   cancelled = false
   view.busy = true
@@ -126,7 +126,7 @@ export async function reload(offset = 0) {
     const count = Math.min(size, total - start)
     blocks = new Map()
     source = { body, start, count }
-    Object.assign(view, { total, offset: start, count })
+    Object.assign(view, { total, offset: start, count, preservePosition })
     view.serial++
     view.version++
   } catch (e) {
@@ -148,47 +148,59 @@ export async function renameCharacter(id, name) {
 }
 
 let timer
+let polling = false
+let seenGeneration = -1
+let manualLoad = true
 // focus: show the character of this log afterwards (used when the user picks or drops a log).
 export async function startLoad(path, focus = false) {
-  await post('/api/load', { path, focus })
-  poll()
-  clearTimeout(timer)
+  const result = await post('/api/load', { path, focus })
+  if (!result.started) throw new Error('更新中です。少し待ってからもう一度お試しください。')
+  manualLoad = true
+  await poll()
 }
 
-// While the lookup tables download, the logs are read again once they arrive: keep watching.
-let watching = false
-function watchDict() {
-  if (watching || state.dict !== 'downloading') return
-  watching = true
-  const tick = async () => {
-    const next = await get('/api/state')
-    if (next.dict === 'downloading') return setTimeout(tick, 1000)
-    watching = false
-    clearTimeout(timer)
-    poll()
-  }
-  setTimeout(tick, 1000)
+export async function setMonitoring(enabled) {
+  await post('/api/monitoring', { enabled })
+  state.monitoring = enabled
 }
 
 export async function poll() {
-  Object.assign(state, await get('/api/state'))
-  watchDict()
-  if (state.status === 'loading') {
-    timer = setTimeout(poll, 300)
-  } else if (state.status === 'ready') {
+  if (polling) return
+  polling = true
+  clearTimeout(timer)
+  try {
+    Object.assign(state, await get('/api/state'))
+    if (state.status !== 'ready' || state.generation === seenGeneration) return
+    const previousKinds = new Set(kindsOf(tab.value).map((c) => c.id))
     meta.value = await get('/api/meta')
     // One character is always shown: keep the current one, else the one with the most lines.
     const chars = meta.value.characters
     if (!chars.some((c) => c.id === filters.character)) {
       filters.character = [...chars].sort((x, y) => y.count - x.count)[0]?.id || ''
     }
-    if (state.focus && chars.some((c) => c.id === state.focus)) filters.character = state.focus
-    setTab(tab.value === 'all' || kindsOf(tab.value).length ? tab.value : 'all')
+    if (manualLoad) {
+      if (state.focus && chars.some((c) => c.id === state.focus)) filters.character = state.focus
+      setTab(tab.value === 'all' || kindsOf(tab.value).length ? tab.value : 'all')
+    } else {
+      const next = new Set(selected.value)
+      for (const c of kindsOf(tab.value)) if (!previousKinds.has(c.id)) next.add(c.id)
+      selected.value = next
+      const wasLastPage = view.offset + view.count >= view.total
+      await reload(wasLastPage && view.followLatest !== false ? -1 : view.offset, true)
+    }
+    seenGeneration = state.generation
+    manualLoad = false
+  } catch (e) {
+    state.error = e.message
+  } finally {
+    polling = false
+    timer = setTimeout(poll, state.status === 'loading' ? 300 : 1000)
   }
 }
 
 // Deletes the archived logs of one character, then shows what is left.
 export async function deleteCharacter(id) {
   await post('/api/delete_character', { id })
+  manualLoad = true
   poll()
 }

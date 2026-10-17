@@ -197,6 +197,7 @@ mark { background: #d9c27e55; color: inherit; border-radius: 2px; }
 .menu label { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
 .menu label .ff-input { margin-top: 3px; }
 .menu .check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; }
+.menu .live-help { margin-top: 6px; color: var(--muted); font-size: 12px; }
 .menu .dates { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .menu .row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-top: 8px; }
 .menu .hint { margin: 6px 0 0; }

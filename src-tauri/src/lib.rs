@@ -46,6 +46,8 @@ struct Inner {
     /// Character to show after a log was picked or dropped by hand (empty: keep the current one).
     focus: String,
     cache: Option<(CacheKey, Arc<Vec<u32>>)>,
+    monitoring: bool,
+    refreshing: bool,
 }
 
 pub struct AppState {
@@ -55,6 +57,7 @@ pub struct AppState {
     data_dir: PathBuf,
     /// Local copy of every log seen so far (the game rotates and overwrites its own).
     archive_dir: PathBuf,
+    source_cache: Mutex<logfile::SourceCache>,
 }
 
 #[derive(Deserialize, Default, Clone)]
@@ -94,12 +97,17 @@ impl AppState {
 
     /// `copy`: import new records from `path` into the archive first. `focus`: show the character of `path` afterwards.
     fn start_load(self: &Arc<Self>, path: PathBuf, copy: bool, focus: bool) -> bool {
+        self.start_load_mode(path, copy, focus, false)
+    }
+
+    fn start_load_mode(self: &Arc<Self>, path: PathBuf, copy: bool, focus: bool, background: bool) -> bool {
         {
             let mut inner = lock(&self.inner);
-            if inner.status == "loading" {
+            if inner.status == "loading" || inner.refreshing || (background && (!inner.monitoring || inner.path != path)) {
                 return false;
             }
-            inner.status = "loading";
+            inner.refreshing = background;
+            if !background { inner.status = "loading"; }
             inner.error.clear();
             inner.path = path.clone();
             inner.focus = if focus { logfile::main_character(&path).unwrap_or_default() } else { String::new() };
@@ -117,8 +125,24 @@ impl AppState {
             lock(&state.inner).phase = "copy";
             let mut notes = Vec::new();
             if copy {
-                match logfile::archive_logs(&path, &state.archive_dir, &store) {
-                    Ok(report) => notes.extend(report.errors),
+                let mut cache = state.source_cache.lock().unwrap_or_else(|e| e.into_inner());
+                if !background { *cache = logfile::SourceCache::default(); }
+                match logfile::archive_logs_cached(&path, &state.archive_dir, &mut cache, &store) {
+                    Ok(report) => {
+                        if background && report.records == 0 {
+                            let mut inner = lock(&state.inner);
+                            inner.error = report.errors.join("\n");
+                            inner.refreshing = false;
+                            return;
+                        }
+                        notes.extend(report.errors);
+                    }
+                    Err(e) if background => {
+                        let mut inner = lock(&state.inner);
+                        inner.error = e;
+                        inner.refreshing = false;
+                        return;
+                    }
                     Err(e) => notes.push(format!("{e}（保存済みのコピーを表示します）")),
                 }
             }
@@ -135,6 +159,7 @@ impl AppState {
             });
             let guesses = result.as_ref().map(|l| logfile::guess_names(&l.entries)).unwrap_or_default();
             let mut inner = lock(&state.inner);
+            inner.refreshing = false;
             match result {
                 Ok(loaded) => {
                     inner.trailing_files = loaded.reports.iter().filter(|r| r.trailing_bytes_ignored > 0).count();
@@ -157,11 +182,12 @@ impl AppState {
             });
             if catch_unwind(job).is_err() {
                 let mut inner = lock(&state.inner);
-                inner.status = "error";
+                inner.refreshing = false;
+                if !background { inner.status = "error"; }
                 inner.error = "読み込み中に内部エラーが発生しました".to_owned();
             }
         });
-        if std::env::var_os("AETHERLOG_LOGS").is_none() {
+        if !background && std::env::var_os("AETHERLOG_LOGS").is_none() {
             let _ = std::fs::create_dir_all(&self.data_dir)
                 .and_then(|()| std::fs::write(self.data_dir.join("last_path.txt"), self.path_text()));
         }
@@ -226,6 +252,9 @@ struct StateView {
     /// Lookup tables: "ready", "downloading" or "error" (see `dict_error`).
     dict: &'static str,
     dict_error: String,
+    generation: usize,
+    monitoring: bool,
+    refreshing: bool,
 }
 
 #[derive(Serialize)]
@@ -335,6 +364,9 @@ async fn state(app: State<'_, Arc<AppState>>) -> Result<StateView, String> {
         focus: inner.focus.clone(),
         dict,
         dict_error,
+        generation: inner.generation,
+        monitoring: inner.monitoring,
+        refreshing: inner.refreshing,
     })
 }
 
@@ -401,12 +433,23 @@ async fn load_logs(app: State<'_, Arc<AppState>>, path: String, focus: Option<bo
     Ok(serde_json::json!({ "started": app.inner().start_load(target, true, focus.unwrap_or(false)) }))
 }
 
+#[tauri::command]
+async fn set_monitoring(app: State<'_, Arc<AppState>>, enabled: bool) -> Result<(), String> {
+    lock(&app.inner).monitoring = enabled;
+    Ok(())
+}
+
 /// Deletes the archived logs of one character and shows what is left. The game's own logs are
 /// not touched, so a later reload imports them again if the game still has them.
 #[tauri::command]
 async fn delete_character(app: State<'_, Arc<AppState>>, id: String) -> Result<serde_json::Value, String> {
-    if lock(&app.inner).status == "loading" {
-        return Err("読み込み中は削除できません".into());
+    {
+        let mut inner = lock(&app.inner);
+        if inner.status == "loading" || inner.refreshing {
+            return Err("読み込み中は削除できません".into());
+        }
+        // Pause automatic imports so deletion is not immediately undone by monitoring.
+        inner.monitoring = false;
     }
     logfile::delete_character(&app.archive_dir, &id)?;
     let mut names = app.load_names();
@@ -540,12 +583,9 @@ fn start_dictionary(state: &Arc<AppState>) {
                 loop {
                     let (busy, path, ready) = {
                         let inner = lock(&state.inner);
-                        (inner.status == "loading", inner.path.clone(), inner.status == "ready")
+                        (inner.status == "loading" || inner.refreshing, inner.path.clone(), inner.status == "ready")
                     };
-                    if !busy {
-                        if ready {
-                            state.start_load(path, false, false);
-                        }
+                    if !busy && (!ready || state.start_load(path, false, false)) {
                         break;
                     }
                     std::thread::sleep(std::time::Duration::from_millis(200));
@@ -555,6 +595,17 @@ fn start_dictionary(state: &Arc<AppState>) {
             }
             Err(e) => dict::set_status("error", e),
         }
+    });
+}
+
+/// One worker polls sources; start_load_mode serializes it with all other archive work.
+fn start_monitor(state: &Arc<AppState>) {
+    let weak = Arc::downgrade(state);
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let Some(state) = weak.upgrade() else { break };
+        let path = lock(&state.inner).path.clone();
+        state.start_load_mode(path, true, false, true);
     });
 }
 
@@ -617,15 +668,17 @@ pub fn run() {
             }
             let root = default_log_root(app, &data_dir);
             let shared = Arc::new(AppState {
-                inner: Mutex::new(Inner { path: root.clone(), ..Inner::default() }),
+                inner: Mutex::new(Inner { path: root.clone(), monitoring: true, ..Inner::default() }),
                 progress: [AtomicUsize::new(0), AtomicUsize::new(0)],
                 archive_dir: data_dir.join("archive"),
                 data_dir,
+                source_cache: Mutex::new(logfile::SourceCache::default()),
             });
             if root.exists() {
                 shared.start_load(root, true, false);
             }
             start_dictionary(&shared);
+            start_monitor(&shared);
             app.manage(shared);
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
@@ -633,7 +686,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![notices, open_homepage, state, meta, load_logs, delete_character, query, export_entries, set_name, open_lodestone])
+        .invoke_handler(tauri::generate_handler![notices, open_homepage, state, meta, load_logs, set_monitoring, delete_character, query, export_entries, set_name, open_lodestone])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| eprintln!("Aetherlog stopped: {e}"));
 }
@@ -657,6 +710,54 @@ mod notices_tests {
 mod metadata_tests {
     use super::*;
 
+    fn wait_for_load(app: &AppState) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let inner = lock(&app.inner);
+            if inner.status != "loading" && !inner.refreshing { break; }
+            drop(inner);
+            assert!(std::time::Instant::now() < deadline, "load timed out");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn live_refresh_publishes_only_new_records_and_respects_pause() {
+        let dir = logfile::tests::temp("live-state");
+        let source = dir.join("game");
+        logfile::tests::game_log(&source, "00000000.log", 0, &["first"]);
+        let app = Arc::new(AppState {
+            inner: Mutex::new(Inner { monitoring: true, ..Inner::default() }),
+            progress: [AtomicUsize::new(0), AtomicUsize::new(0)],
+            data_dir: dir.clone(), archive_dir: dir.join("archive"),
+            source_cache: Mutex::new(logfile::SourceCache::default()),
+        });
+        assert!(app.start_load(source.clone(), true, false));
+        wait_for_load(&app);
+        assert_eq!(lock(&app.inner).generation, 1);
+        assert!(app.start_load_mode(source.clone(), true, false, true));
+        wait_for_load(&app);
+        assert_eq!(lock(&app.inner).generation, 1, "unchanged sources do not invalidate queries");
+        logfile::tests::game_log(&source, "00000000.log", 0, &["first", "second"]);
+        lock(&app.inner).monitoring = false;
+        assert!(!app.start_load_mode(source.clone(), true, false, true));
+        assert_eq!(lock(&app.inner).entries.len(), 1);
+        lock(&app.inner).monitoring = true;
+        assert!(!app.start_load_mode(dir.join("old-location"), true, false, true));
+        assert!(app.start_load_mode(source.clone(), true, false, true));
+        wait_for_load(&app);
+        let inner = lock(&app.inner);
+        assert_eq!(inner.status, "ready");
+        assert_eq!(inner.generation, 2);
+        assert_eq!(inner.entries.len(), 2);
+        drop(inner);
+        // A new game file is discovered even when the current one has not changed.
+        logfile::tests::game_log(&source, "00000001.log", 2, &["third"]);
+        assert!(app.start_load_mode(source, true, false, true));
+        wait_for_load(&app);
+        assert_eq!(lock(&app.inner).entries.len(), 3);
+    }
+
     #[test]
     fn channel_counts_are_scoped_to_each_character() {
         let entries = [("first", 10), ("first", 10), ("second", 10), ("second", 60)]
@@ -673,6 +774,7 @@ mod metadata_tests {
             progress: [AtomicUsize::new(0), AtomicUsize::new(0)],
             data_dir: std::env::temp_dir().join("aetherlog-metadata-test-missing"),
             archive_dir: PathBuf::new(),
+            source_cache: Mutex::new(logfile::SourceCache::default()),
         };
         let meta = meta_impl(&app).unwrap();
         assert_eq!(meta.counts["10"], 3);

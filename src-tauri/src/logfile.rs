@@ -377,6 +377,10 @@ pub struct ArchiveReport {
     pub errors: Vec<String>,
 }
 
+/// Successful source snapshots only; failed or changing writes are retried on the next tick.
+#[derive(Default)]
+pub struct SourceCache(HashMap<PathBuf, (u64, std::time::SystemTime)>);
+
 /// Appends the records of `log` that the stream at `dest` does not hold yet and returns how
 /// many that was.  A stream that does not exist is created.
 fn import_session(dest: &Path, log: &GameLog<'_>, stamp: u32) -> Result<usize, String> {
@@ -456,7 +460,12 @@ fn migrate_whole_copies(archive: &Path, report: &mut ArchiveReport) {
 /// its character, file name and first record time; only records the archive does not hold
 /// yet are appended, so nothing the game later deletes or truncates is lost.  Originals are
 /// only read.
+#[cfg(test)]
 pub fn archive_logs(source: &Path, archive: &Path, progress: impl Fn(usize, usize)) -> Result<ArchiveReport, String> {
+    archive_logs_cached(source, archive, &mut SourceCache::default(), progress)
+}
+
+pub fn archive_logs_cached(source: &Path, archive: &Path, cache: &mut SourceCache, progress: impl Fn(usize, usize)) -> Result<ArchiveReport, String> {
     let mut report = ArchiveReport::default();
     migrate_whole_copies(archive, &mut report);
     let paths = find_files(source, Some(archive), &["log"])?;
@@ -468,9 +477,23 @@ pub fn archive_logs(source: &Path, archive: &Path, progress: impl Fn(usize, usiz
     }
     for (i, path) in paths.iter().enumerate() {
         progress(i + 1, paths.len());
+        let snapshot = || fs::metadata(path).and_then(|m| Ok((m.len(), m.modified()?)));
+        let before = snapshot().ok();
+        if before.is_some() && cache.0.get(path) == before.as_ref() {
+            report.unchanged += 1;
+            continue;
+        }
         let import = || -> Result<usize, String> {
             let data = fs::read(path).map_err(|e| e.to_string())?;
-            let Ok(log) = split_game_log(&data) else { return Ok(0) };
+            let log = split_game_log(&data)?;
+            for (_, raw) in &log.records {
+                if raw.len() < 10 || raw[8] != 0x1f || split_fields(&raw[9..]).is_err() {
+                    return Err("ログの行が不完全です。次回もう一度読み込みます".into());
+                }
+            }
+            if snapshot().ok() != before {
+                return Err("ログの書き込み中です。次回もう一度読み込みます".into());
+            }
             let Some(stamp) = first_stamp(&log) else { return Ok(0) };
             let character = character_of(path);
             let stem = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -478,14 +501,15 @@ pub fn archive_logs(source: &Path, archive: &Path, progress: impl Fn(usize, usiz
             import_session(&dest, &log, stamp)
         };
         match import() {
-            Ok(0) => report.unchanged += 1,
             Ok(n) => {
-                report.copied += 1;
+                if let Some(stamp) = before { cache.0.insert(path.clone(), stamp); }
+                if n == 0 { report.unchanged += 1; } else { report.copied += 1; }
                 report.records += n;
             }
             Err(e) => report.errors.push(format!("{}: {e}", path.display())),
         }
     }
+    cache.0.retain(|path, _| paths.binary_search(path).is_ok());
     Ok(report)
 }
 
@@ -679,7 +703,7 @@ pub fn guess_names(entries: &[Entry]) -> HashMap<String, String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn make_file(dir: &Path, tail: &[u8]) -> PathBuf {
@@ -701,7 +725,7 @@ mod tests {
         path
     }
 
-    fn temp(name: &str) -> PathBuf {
+    pub(crate) fn temp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("aetherlog-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
@@ -794,7 +818,7 @@ mod tests {
     }
 
     /// A game log with the given records (time `1_700_000_000 + n`, kind 14, sender "Alice").
-    fn game_log(dir: &Path, name: &str, first: u32, messages: &[&str]) -> PathBuf {
+    pub(crate) fn game_log(dir: &Path, name: &str, first: u32, messages: &[&str]) -> PathBuf {
         let mut bodies = Vec::new();
         for (n, text) in messages.iter().enumerate() {
             let mut record = Vec::new();
@@ -854,6 +878,33 @@ mod tests {
         // Viewing the archive itself imports nothing.
         assert_eq!(archive_logs(&archive, &archive, |_, _| {}).unwrap().records, 0);
         assert_eq!(messages(&archive).len(), 3);
+    }
+
+    #[test]
+    fn repeated_live_copies_keep_one_file_and_retry_incomplete_writes() {
+        let dir = temp("live-copy");
+        let source = dir.join("game");
+        let archive = dir.join("archive");
+        let mut cache = SourceCache::default();
+        for n in 1..=100 {
+            let lines: Vec<String> = (0..n).map(|i| format!("line {i}")).collect();
+            let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+            let path = game_log(&source, "00000000.log", 0, &refs);
+            let original = fs::read(&path).unwrap();
+            let report = archive_logs_cached(&source, &archive, &mut cache, |_, _| {}).unwrap();
+            assert_eq!(report.records, 1);
+            assert_eq!(fs::read(&path).unwrap(), original);
+            assert_eq!(archive_logs_cached(&source, &archive, &mut cache, |_, _| {}).unwrap().records, 0);
+        }
+        let path = game_log(&source, "00000000.log", 0, &["line 0"]);
+        fs::write(&path, [0u8; 3]).unwrap();
+        assert!(!archive_logs_cached(&source, &archive, &mut cache, |_, _| {}).unwrap().errors.is_empty());
+        assert!(!cache.0.contains_key(&path) || cache.0[&path].0 != 3);
+        let lines: Vec<String> = (0..101).map(|i| format!("line {i}")).collect();
+        game_log(&source, "00000000.log", 0, &lines.iter().map(String::as_str).collect::<Vec<_>>());
+        assert_eq!(archive_logs_cached(&source, &archive, &mut cache, |_, _| {}).unwrap().records, 1);
+        assert_eq!(find_files(&archive, None, &["alog", "tmp", "log"]).unwrap().len(), 1);
+        assert_eq!(messages(&archive).len(), 101);
     }
 
     #[test]

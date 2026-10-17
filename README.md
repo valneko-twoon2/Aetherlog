@@ -26,6 +26,7 @@
 - **Characters and days**: pick a character, then a single day or all days.
 - **Export**: save what the filters show as CSV or JSON.
 - **Local archive**: the game overwrites its logs, so Aetherlog keeps its own copy; logs the game later deletes stay readable.
+- **Automatic updates**: checks the selected log location about once a second and saves new records to the existing archive stream. Repeated copies of a growing log do not create extra files.
 - **Read-only**: never modifies your logs, and writes nothing but `.csv` / `.json` exports.
 
 ## Screenshots
@@ -53,6 +54,8 @@ If you plan to commit, see [`AGENTS.md`](AGENTS.md).
 ## Usage
 
 On start, Aetherlog reads every `.log` under the folder you opened last time, or under `Documents\My Games\FINAL FANTASY XIV - A Realm Reborn` on the first run.
+
+Automatic saving and updates are enabled on each launch. Toggle `ログを自動保存・更新する` in the menu to pause or resume. Updates appear after the game writes to disk; Aetherlog cannot display chat that the game has not saved yet. New game log sessions create new archive streams, while additional lines in the same session are appended without duplicate snapshots. Filters and the reading position are kept during automatic updates; the latest lines stay in view while following the end of the list. Deleting a character's archive pauses automatic updates so the remaining game logs are not immediately imported again. Re-enabling updates or reloading imports them again.
 
 - **Menu** (`メニュー`): choose the character, change the log location (folder, file or drag and drop), reload, or delete a character's archived logs (the game's own logs are never touched).
 - **Export** (`エクスポート`): saves everything the current filters match as CSV (UTF-8 with BOM) or JSON.

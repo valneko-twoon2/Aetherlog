@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ChatWindow from './components/ChatWindow.vue'
 import { download, get, onDrop, post } from './api.js'
-import { cancelLoad, deleteCharacter, exportBody, filters, meta, poll, reload, renameCharacter, startLoad, state, view } from './useLog.js'
+import { cancelLoad, deleteCharacter, exportBody, filters, meta, poll, reload, renameCharacter, setMonitoring, startLoad, state, view } from './useLog.js'
 
 const path = ref('')
 const menu = ref(false)
@@ -175,7 +175,7 @@ function save(format) {
             <input :key="current.id" class="ff-input" :value="current.name" :placeholder="current.id" maxlength="40" @change="renameCharacter(current.id, $event.target.value).catch((e) => (message = e.message))" />
           </label>
           <div v-if="current" class="del-row">
-            <button type="button" class="ff-btn danger" :disabled="loading" @click="askDelete">このキャラクターのログを削除</button>
+            <button type="button" class="ff-btn danger" :disabled="loading || state.refreshing" @click="askDelete">このキャラクターのログを削除</button>
           </div>
         </section>
       </template>
@@ -189,6 +189,8 @@ function save(format) {
             <button class="ff-btn primary" :disabled="loading">再読み込み</button>
           </div>
         </form>
+        <label class="check"><input type="checkbox" :checked="state.monitoring" @change="setMonitoring($event.target.checked).catch((e) => (message = e.message))" /> ログを自動保存・更新する（約1秒ごと）</label>
+        <p class="live-help">同じログへの追記は、保存済みのファイルに追加します。ゲームがファイルに書き出した内容が対象です。</p>
       </section>
       <section class="end">
         <button type="button" class="link-btn" @click="menu = false; aboutDlg.showModal()">Aetherlog について</button>
@@ -223,7 +225,7 @@ function save(format) {
         <template v-else>
           <h2>本当に削除しますか？</h2>
           <p>「{{ current.name || current.id }}」の {{ current.count.toLocaleString() }} 件が、アーカイブから消えます。元に戻せません。</p>
-          <p>ゲームのフォルダーに元のログが残っている場合は、次の再読み込みで取り込み直されます。</p>
+          <p>削除後は自動更新を停止します。元のログが残っている場合は、再読み込みや自動更新の再開で取り込み直されます。</p>
           <div class="actions">
             <button type="button" class="ff-btn" @click="delDlg.close()">やめる</button>
             <button type="button" class="ff-btn danger" @click="confirmDelete">完全に削除する</button>
