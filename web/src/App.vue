@@ -208,13 +208,12 @@ function save(format) {
             <button class="ff-btn primary" :disabled="loading">再読み込み</button>
           </div>
         </form>
-        <label class="check"><input type="checkbox" :checked="state.monitoring" @change="setMonitoring($event.target.checked).catch((e) => (message = e.message))" /> ログを自動保存・更新する</label>
         <label>自動更新の間隔
           <select class="ff-input" :value="state.preferences.refresh_seconds" :disabled="preferencesBusy" @change="savePreferences({ refresh_seconds: Number($event.target.value) }, $event)">
             <option v-for="seconds in refreshIntervals" :key="seconds" :value="seconds">{{ seconds }}秒</option>
           </select>
         </label>
-        <p class="live-help">同じログへの追記は、保存済みのファイルに追加します。ゲームがファイルに書き出した内容が対象です。</p>
+        <label class="check auto-save"><input type="checkbox" :checked="state.monitoring" @change="setMonitoring($event.target.checked).catch((e) => (message = e.message))" /> ログを自動保存・更新する</label>
       </section>
       <section>
         <h2>表示設定</h2>
