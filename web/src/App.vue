@@ -209,7 +209,7 @@ function save(format) {
           <div class="row">
             <button type="button" class="ff-btn" @click="pick('folder')">フォルダー</button>
             <button type="button" class="ff-btn" @click="pick('file')">ファイル</button>
-            <button class="ff-btn primary" :disabled="loading">再読み込み</button>
+            <button class="ff-btn primary" :disabled="loading || state.dict === 'downloading'">再読み込み</button>
           </div>
         </form>
       </section>
@@ -226,8 +226,8 @@ function save(format) {
       <div :style="{ width: percent + '%' }" /><span>{{ state.phase === 'copy' ? 'ログを保存中…' : '読み込み中…' }} {{ state.progress[0] }} / {{ state.progress[1] }}</span>
     </div>
     <p v-if="message || state.error" class="notice err">{{ message || state.error }}</p>
-    <p v-if="state.dict === 'downloading'" class="notice">定型文などの辞書をダウンロード中です。終わるとログを読み直します。</p>
-    <p v-else-if="state.dict === 'error'" class="notice err">辞書をダウンロードできませんでした（次回の起動時にもう一度試します）: {{ state.dict_error }}</p>
+    <p v-if="state.dict === 'downloading'" class="notice">定型文などの辞書をダウンロード中です。終わるとログを表示します。</p>
+    <p v-else-if="state.dict === 'error'" class="notice err">辞書をダウンロードできなかったため、定型文などは仮の表示です（次回の起動時にもう一度試します）: {{ state.dict_error }}</p>
 
     <dialog v-if="view.slow" ref="waitDlg" class="wait-pop" aria-live="polite" @cancel.prevent="cancelLoad">
       <span class="spinner" aria-hidden="true" />
@@ -296,7 +296,7 @@ function save(format) {
     </dialog>
 
     <ChatWindow v-if="meta" />
-    <p v-else-if="!loading" class="notice">「メニュー」からログの場所を指定してください。</p>
+    <p v-else-if="!loading && state.dict !== 'downloading'" class="notice">「メニュー」からログの場所を指定してください。</p>
 
   </div>
 </template>

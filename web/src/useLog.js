@@ -193,7 +193,7 @@ export async function poll() {
     state.error = e.message
   } finally {
     polling = false
-    timer = setTimeout(poll, state.status === 'loading' ? 300 : 1000)
+    timer = setTimeout(poll, state.status === 'loading' || state.dict === 'downloading' ? 300 : 1000)
   }
 }
 

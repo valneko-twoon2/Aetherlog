@@ -74,7 +74,7 @@ $env:AETHELOG_LOGS='<log folder>'; cargo test --release real_logs -- --ignored -
 
 ## 4. Regenerating the data
 
-Delete `userdata/dict` and start the app to download the tables again (`start_dictionary` in `lib.rs`: it loads the saved files, else downloads in a background thread, then reads the archive once more because search text and exports are decoded at load time; the UI keeps polling while `state.dict` is `downloading`). Missing entries degrade to a placeholder showing the raw payload in hex. `cargo test matches_the_script_output -- --ignored` compared the Rust conversion with the retired PowerShell output (it needs the old `data/` and `tools/.cache`).
+Delete `userdata/dict` and start the app to download the tables again. `start_dictionary` in `lib.rs` runs first at start-up: it loads the saved files, else downloads in a background thread, and only then does the first read of the logs (`start_first_load`), because search text and exports are decoded at load time. While `state.dict` is `downloading`, `start_load_mode` and `load_logs` refuse to read, and the UI shows only a notice. If the download fails the logs are read anyway and missing entries degrade to a placeholder showing the raw payload in hex. `dict::download` fetches the Completion sheet, UIColor and the icon enum side by side, then every lookup sheet it names with 8 connections, parsing each sheet and cutting it to its id and name columns on the thread that fetched it (about 1.3 s on a good connection, against 5 s one at a time); keep it parallel. `cargo test matches_the_script_output -- --ignored` compared the Rust conversion with the retired PowerShell output (it needs the old `data/` and `tools/.cache`).
 
 ## 5. Constraints to keep
 

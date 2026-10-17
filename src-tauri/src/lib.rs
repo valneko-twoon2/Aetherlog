@@ -105,7 +105,9 @@ impl AppState {
     fn start_load_mode(self: &Arc<Self>, path: PathBuf, copy: bool, focus: bool, background: bool) -> bool {
         {
             let mut inner = lock(&self.inner);
-            if inner.status == "loading" || inner.refreshing || (background && (!inner.monitoring || inner.path != path)) {
+            // Logs are decoded with the lookup tables, so nothing is read before they are in place.
+            if dict::status().0 == "downloading"
+                || inner.status == "loading" || inner.refreshing || (background && (!inner.monitoring || inner.path != path)) {
                 return false;
             }
             inner.refreshing = background;
@@ -425,6 +427,9 @@ fn meta_impl(app: &AppState) -> Result<Meta, String> {
 
 #[tauri::command]
 async fn load_logs(app: State<'_, Arc<AppState>>, path: String, focus: Option<bool>) -> Result<serde_json::Value, String> {
+    if dict::status().0 == "downloading" {
+        return Err("辞書をダウンロード中です。終わるまでお待ちください。".into());
+    }
     let target = PathBuf::from(path.trim());
     if !target.exists() {
         return Err(format!("パスが見つかりません: {}", target.display()));
@@ -577,14 +582,16 @@ fn migrate_legacy(app: &tauri::App, data_dir: &Path) {
     }
 }
 
-/// Loads the saved lookup tables, or downloads them in the background when they are missing.
-/// Rows are rendered from the live tables, but search text and exports are decoded when the
-/// logs are read, so the logs are read once more after a download.
+/// Prepares the lookup tables before anything else: loads the saved ones, or downloads them in
+/// the background when they are missing.  Search text and exports are decoded when the logs are
+/// read, so the first read of the logs waits until the tables are in place (`start_load_mode`
+/// refuses while they download).  When the download fails the logs are read without them.
 fn start_dictionary(state: &Arc<AppState>) {
     let dir = state.data_dir.join("dict");
     if let Some(saved) = dict::load(&dir) {
         dict::install(saved);
         dict::set_status("ready", "");
+        start_first_load(state);
         return;
     }
     dict::set_status("downloading", "");
@@ -593,23 +600,20 @@ fn start_dictionary(state: &Arc<AppState>) {
         match catch_unwind(|| dict::download(&dir)).unwrap_or_else(|_| Err("内部エラーが発生しました".to_owned())) {
             Ok(fresh) => {
                 dict::install(fresh);
-                // Wait for a load in progress, then read the archive again with the new tables.
-                loop {
-                    let (busy, path, ready) = {
-                        let inner = lock(&state.inner);
-                        (inner.status == "loading" || inner.refreshing, inner.path.clone(), inner.status == "ready")
-                    };
-                    if !busy && (!ready || state.start_load(path, false, false)) {
-                        break;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(200));
-                }
-                // Only now: the UI keeps polling while "downloading", so it sees the reload start.
                 dict::set_status("ready", "");
             }
             Err(e) => dict::set_status("error", e),
         }
+        start_first_load(&state);
     });
+}
+
+/// The read of the start-up location (the last one, or the game's folder).
+fn start_first_load(state: &Arc<AppState>) {
+    let path = lock(&state.inner).path.clone();
+    if path.exists() {
+        state.start_load(path, true, false);
+    }
 }
 
 /// Imports again when the game writes a `.log`.  The game writes a log only when it holds 1,000
@@ -728,15 +732,12 @@ pub fn run() {
             let root = default_log_root(app, &data_dir);
             let preferences = preferences::Preferences::load(&data_dir);
             let shared = Arc::new(AppState {
-                inner: Mutex::new(Inner { path: root.clone(), monitoring: true, preferences, ..Inner::default() }),
+                inner: Mutex::new(Inner { path: root, monitoring: true, preferences, ..Inner::default() }),
                 progress: [AtomicUsize::new(0), AtomicUsize::new(0)],
                 archive_dir: data_dir.join("archive"),
                 data_dir,
                 source_cache: Mutex::new(logfile::SourceCache::default()),
             });
-            if root.exists() {
-                shared.start_load(root, true, false);
-            }
             start_dictionary(&shared);
             start_monitor(&shared);
             app.manage(shared);
@@ -770,6 +771,12 @@ mod notices_tests {
 mod metadata_tests {
     use super::*;
 
+    /// The dictionary status is process-wide, so the tests that start loads run one at a time.
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: Mutex<()> = Mutex::new(());
+        LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     fn wait_for_load(app: &AppState) {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         loop {
@@ -783,6 +790,7 @@ mod metadata_tests {
 
     #[test]
     fn live_refresh_publishes_only_new_records_and_respects_pause() {
+        let _serial = serial();
         let dir = logfile::tests::temp("live-state");
         let source = dir.join("game");
         logfile::tests::game_log(&source, "00000000.log", 0, &["first"]);
@@ -818,6 +826,30 @@ mod metadata_tests {
         assert_eq!(lock(&app.inner).entries.len(), 3);
     }
 
+    #[test]
+    fn logs_are_not_read_while_the_dictionary_downloads() {
+        let _serial = serial();
+        let dir = logfile::tests::temp("dict-wait");
+        let source = dir.join("game");
+        logfile::tests::game_log(&source, "00000000.log", 0, &["first"]);
+        let app = Arc::new(AppState {
+            inner: Mutex::new(Inner { monitoring: true, ..Inner::default() }),
+            progress: [AtomicUsize::new(0), AtomicUsize::new(0)],
+            data_dir: dir.clone(), archive_dir: dir.join("archive"),
+            source_cache: Mutex::new(logfile::SourceCache::default()),
+        });
+        dict::set_status("downloading", "");
+        assert!(!app.start_load(source.clone(), true, false), "a manual load waits");
+        assert!(!app.start_load_mode(source.clone(), true, false, true), "so does a background import");
+        assert!(lock(&app.inner).status.is_empty() && lock(&app.inner).entries.is_empty());
+        assert!(!dir.join("archive").exists(), "nothing is saved either");
+        dict::set_status("ready", "");
+        assert!(app.start_load(source, true, false));
+        wait_for_load(&app);
+        assert_eq!(lock(&app.inner).entries.len(), 1);
+        dict::set_status("", "");
+    }
+
     fn wait_for_entries(app: &AppState, count: usize) -> bool {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while std::time::Instant::now() < deadline {
@@ -829,6 +861,7 @@ mod metadata_tests {
 
     #[test]
     fn monitor_imports_when_the_game_writes_a_log() {
+        let _serial = serial();
         let dir = logfile::tests::temp("live-watch");
         let source = dir.join("game");
         logfile::tests::game_log(&source, "00000000.log", 0, &["first"]);
