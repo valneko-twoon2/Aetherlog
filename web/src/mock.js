@@ -109,10 +109,10 @@ function select(params) {
 
 let manualName = ''
 let monitoring = true
-let preferences = { animations: true, refresh_seconds: 1 }
+let preferences = { animations: true }
 try {
   const saved = JSON.parse(localStorage.getItem('aethelog-preferences') || 'null')
-  if (typeof saved?.animations === 'boolean' && Number.isInteger(saved.refresh_seconds) && saved.refresh_seconds >= 1 && saved.refresh_seconds <= 60) preferences = saved
+  if (typeof saved?.animations === 'boolean') preferences = { animations: saved.animations }
 } catch { /* Missing or invalid browser storage uses the same defaults as the desktop app. */ }
 
 export default {
@@ -132,9 +132,8 @@ export default {
   },
   async set_monitoring({ enabled }) { monitoring = enabled },
   async set_preferences({ preferences: next }) {
-    if (!Number.isInteger(next.refresh_seconds) || next.refresh_seconds < 1 || next.refresh_seconds > 60) throw new Error('Invalid refresh interval')
-    localStorage.setItem('aethelog-preferences', JSON.stringify(next))
-    preferences = { ...next }
+    preferences = { animations: next.animations }
+    localStorage.setItem('aethelog-preferences', JSON.stringify(preferences))
     return preferences
   },
   async meta() {

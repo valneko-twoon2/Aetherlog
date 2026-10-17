@@ -9,7 +9,6 @@ const menu = ref(false)
 const exporting = ref(false)
 const message = ref('')
 const preferencesBusy = ref(false)
-const refreshIntervals = [1, 2, 5, 10, 30, 60]
 watch(() => state.preferences.animations, (enabled) => {
   document.documentElement.dataset.animations = enabled ? 'on' : 'off'
 }, { immediate: true })
@@ -21,8 +20,7 @@ async function savePreferences(changes, event) {
     await setPreferences(changes)
   } catch (e) {
     message.value = e.message
-    if (event.target.type === 'checkbox') event.target.checked = state.preferences.animations
-    else event.target.value = state.preferences.refresh_seconds
+    event.target.checked = state.preferences.animations
   } finally {
     preferencesBusy.value = false
   }
@@ -208,11 +206,6 @@ function save(format) {
             <button class="ff-btn primary" :disabled="loading">再読み込み</button>
           </div>
         </form>
-        <label>自動更新の間隔
-          <select class="ff-input" :value="state.preferences.refresh_seconds" :disabled="preferencesBusy" @change="savePreferences({ refresh_seconds: Number($event.target.value) }, $event)">
-            <option v-for="seconds in refreshIntervals" :key="seconds" :value="seconds">{{ seconds }}秒</option>
-          </select>
-        </label>
         <label class="check auto-save"><input type="checkbox" :checked="state.monitoring" @change="setMonitoring($event.target.checked).catch((e) => (message = e.message))" /> ログを自動保存・更新する</label>
       </section>
       <section>

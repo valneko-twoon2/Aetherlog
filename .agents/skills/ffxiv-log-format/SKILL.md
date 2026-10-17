@@ -17,6 +17,8 @@ Verified against real logs (450,000 lines, 463 files). **Do not re-analyse the g
 - Channel kind = `code & 0x7F`. The upper bits are target/source flags and are **not** part of the kind name (keep the raw code separately).
 - The 0x1F separator also occurs inside link payloads, so locate it while skipping each `0x02 .. 0x03` control sequence.
 - Location: `<character>/log/*.log`; the character is the grandparent folder name of the file.
+- When the game writes (measured on 463 files, 2026-10): a file holds **1,000 records** (`first..first+1000`), then the next file name (hex index) starts. A full file is written to disk about 38 to 39 seconds after its last record; a partial file only at logout or game exit (no write was seen for over 95 seconds of play). Chat is therefore never visible on disk in real time. Whether very long sessions also flush partial files periodically is unverified.
+- Each session numbers its files from `00000000.log` again and overwrites the old file in place without truncating it, which is where the stale tail comes from; the previous session's file of the same number is lost unless it was archived first.
 
 ## 2. SeString
 

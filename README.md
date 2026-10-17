@@ -26,7 +26,7 @@
 - **Characters and days**: pick a character, then a single day or all days.
 - **Export**: save what the filters show as CSV or JSON.
 - **Local archive**: the game overwrites its logs, so Aethelog keeps its own copy; logs the game later deletes stay readable.
-- **Automatic updates**: checks the selected log location at a configurable interval (1, 2, 5, 10, 30 or 60 seconds) and saves new records to the existing archive stream. Repeated copies of a growing log do not create extra files.
+- **Automatic updates**: watches the selected log location and, whenever the game writes a log, saves the new records to the existing archive stream. Repeated copies of a growing log do not create extra files.
 - **Animation settings**: turn background motion, loading animations and transitions on or off. The operating system's reduced-motion preference is also respected.
 - **Read-only**: never modifies your logs, and writes nothing but `.csv` / `.json` exports.
 
@@ -56,7 +56,7 @@ If you plan to commit, see [`AGENTS.md`](AGENTS.md).
 
 On start, Aethelog reads every `.log` under the folder you opened last time, or under `Documents\My Games\FINAL FANTASY XIV - A Realm Reborn` on the first run.
 
-Automatic saving and updates are enabled on each launch. Toggle `ログを自動保存・更新する` in the menu to pause or resume. Select the interval under `自動更新の間隔` (default: 1 second). Under `表示設定`, toggle `アニメーションを有効にする`. The interval and animation setting are saved in `userdata/preferences.json` and restored on the next launch. Updates appear after the game writes to disk; Aethelog cannot display chat that the game has not saved yet. New game log sessions create new archive streams, while additional lines in the same session are appended without duplicate snapshots. Filters and the reading position are kept during automatic updates; the latest lines stay in view while following the end of the list. Deleting a character's archive pauses automatic updates so the remaining game logs are not immediately imported again. Re-enabling updates or reloading imports them again.
+Automatic saving and updates are enabled on each launch. Toggle `ログを自動保存・更新する` in the menu to pause or resume. Under `表示設定`, toggle `アニメーションを有効にする`. The animation setting is saved in `userdata/preferences.json` and restored on the next launch. Aethelog is notified when the game writes a log, and also checks the location once a minute in case a notification is missed. Updates appear only after the game writes to disk: the game writes a log file when it holds 1,000 lines or when you log out, so Aethelog cannot display chat that the game has not saved yet. New game log sessions create new archive streams, while additional lines in the same session are appended without duplicate snapshots. Filters and the reading position are kept during automatic updates; the latest lines stay in view while following the end of the list. Deleting a character's archive pauses automatic updates so the remaining game logs are not immediately imported again. Re-enabling updates or reloading imports them again.
 
 - **Menu** (`メニュー`): choose the character, change the log location (folder, file or drag and drop), reload, or delete a character's archived logs (the game's own logs are never touched).
 - **Export** (`エクスポート`): saves everything the current filters match as CSV (UTF-8 with BOM) or JSON.

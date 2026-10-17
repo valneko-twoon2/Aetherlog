@@ -1,7 +1,7 @@
 import { computed, markRaw, reactive, ref, watch } from 'vue'
 import { get, post } from './api.js'
 
-export const state = reactive({ status: 'idle', phase: '', progress: [0, 0], path: '', error: '', total: 0, focus: '', dict: '', dict_error: '', generation: 0, monitoring: true, refreshing: false, preferences: { animations: true, refresh_seconds: 1 } })
+export const state = reactive({ status: 'idle', phase: '', progress: [0, 0], path: '', error: '', total: 0, focus: '', dict: '', dict_error: '', generation: 0, monitoring: true, refreshing: false, preferences: { animations: true } })
 export const meta = ref(null)
 export const tab = ref('chat')
 export const selected = ref(new Set())

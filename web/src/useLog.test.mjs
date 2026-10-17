@@ -12,7 +12,8 @@ test('live updates retain filters and paging, and unchanged generations do not r
   let metaCalls = 0
   let queries = 0
   let monitoring = true
-  let preferences = { animations: true, refresh_seconds: 1 }
+  let preferences = { animations: true }
+  let saveFails = false
   const get = async (path) => {
     if (path === '/api/state') return { status: 'ready', generation, monitoring, preferences, error: '' }
     metaCalls++
@@ -25,7 +26,7 @@ test('live updates retain filters and paging, and unchanged generations do not r
   const post = async (path, body) => {
     if (path === '/api/monitoring') { monitoring = body.enabled; return }
     if (path === '/api/preferences') {
-      if (body.refresh_seconds < 1 || body.refresh_seconds > 60) throw new Error('Invalid interval')
+      if (saveFails) throw new Error('Save failed')
       preferences = { ...body }
       return preferences
     }
@@ -80,13 +81,10 @@ test('live updates retain filters and paging, and unchanged generations do not r
   assert.equal(log.state.monitoring, false)
   await log.setPreferences({ animations: false })
   assert.equal(log.state.preferences.animations, false)
-  assert.equal(log.state.preferences.refresh_seconds, 1)
-  await log.setPreferences({ refresh_seconds: 30 })
-  assert.equal(log.state.preferences.animations, false)
-  assert.equal(log.state.preferences.refresh_seconds, 30)
-  await assert.rejects(log.setPreferences({ refresh_seconds: 0 }), /Invalid interval/)
-  assert.equal(log.state.preferences.refresh_seconds, 30, 'failed saves preserve the previous setting')
+  saveFails = true
+  await assert.rejects(log.setPreferences({ animations: true }), /Save failed/)
+  assert.equal(log.state.preferences.animations, false, 'failed saves preserve the previous setting')
   await log.poll()
   assert.equal(log.state.monitoring, false)
-  assert.equal(log.state.preferences.refresh_seconds, 30)
+  assert.equal(log.state.preferences.animations, false)
 })

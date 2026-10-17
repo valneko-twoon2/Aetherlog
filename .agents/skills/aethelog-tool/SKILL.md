@@ -12,7 +12,7 @@ A read-only desktop viewer for FFXIV logs: Rust (Tauri 2) backend, Vue 3 + Vite 
 | Path | Role |
 |---|---|
 | `src-tauri/src/lib.rs` | Tauri commands, `AppState`, the loader thread, the filter cache, character-name storage, the start-up log location |
-| `src-tauri/src/preferences.rs` | Saved animation toggle and import interval, validation and persistence |
+| `src-tauri/src/preferences.rs` | Saved animation toggle and its persistence (unknown fields from older versions are ignored) |
 | `src-tauri/src/logfile.rs` | File and record parsing (`parse_file`, `split_fields`), `find_logs`, `select`, CSV/JSON export (`export`), JST date maths, name guessing (`guess_names`) |
 | `src-tauri/src/sestring.rs` | `tokenize`, `decode_text` (plain text), `spans` (styled spans for the UI), `packed_uint`, dictionary loading |
 | `src-tauri/src/channels.rs` | Channel catalog (`catalog`, `name_of`, `fallback`, `GROUPS`) |
@@ -40,7 +40,7 @@ A read-only desktop viewer for FFXIV logs: Rust (Tauri 2) backend, Vue 3 + Vite 
 | `state` | load status (`idle/loading/ready/error`), progress, path, count | `get('/api/state')` |
 | `meta` | channel catalog, groups, counts per channel, characters (name, whether guessed), date range, days with line counts, warning and error counts | `get('/api/meta')` |
 | `load_logs(path)` | start loading; an error string if the path is missing or holds no `.log` | `post('/api/load')` |
-| `set_preferences(preferences)` | Save the animation toggle and import interval in `userdata/preferences.json`; state includes both preferences | `post('/api/preferences')` |
+| `set_preferences(preferences)` | Save the animation toggle in `userdata/preferences.json`; state includes the preferences | `post('/api/preferences')` |
 | `notices` | JSON of the bundled packages and licence texts (`src-tauri/notices.json`) | `get('/api/notices')` |
 | `query(params)` | filter and fetch a page; `offset = -1` is the last page; `limit` is 1 to 1,000,000,000 (0 or less means 200); the UI's "all" sends 1,000,000,000 | `post('/api/query')` |
 | `export_entries(params, path)` | write the filtered rows to a `.csv` or `.json` file | `download('/api/export')` (save dialog, then the command) |
@@ -81,7 +81,7 @@ Delete `userdata/dict` and start the app to download the tables again (`start_di
 - **Never write to the original logs.** Export refuses anything but `.csv` / `.json`. CSV cells that start with `=`, `+`, `-` or `@` get a leading `'` to stop formula execution.
 - Network at runtime: only the one-time dictionary download in `dict.rs` (made by the backend, so the CSP and plugin permissions are unchanged) and `open_lodestone`, which gives the system browser a fixed Lodestone address built from encoded parts. The CSP is `default-src self` plus IPC, and the only plugin permissions are the dialogs (no file-system or shell plugin).
 - A character id must be `FFXIV_CHR` plus up to 32 hex digits. Names are whitespace-normalised and cut to 40 characters.
-- **All app data lives next to the executable**, in `userdata\` (override with `AETHELOG_DATA`): `preferences.json` (animation toggle and import interval, 1 to 60 seconds), `character_names.json` (manual names), `last_path.txt` (last opened location) and `archive\` (the local log archive). `tools/publish.ps1` replaces only `Aethelog.exe`, so `artifacts\userdata` survives a republish. Older versions kept this data in `%APPDATA%\dev.aetherlog.app` and `%LOCALAPPDATA%\dev.aetherlog.app\archive`; the first start moves or copies it into `userdata` (skipped when `AETHELOG_DATA` is set).
+- **All app data lives next to the executable**, in `userdata\` (override with `AETHELOG_DATA`): `preferences.json` (animation toggle), `character_names.json` (manual names), `last_path.txt` (last opened location) and `archive\` (the local log archive). `tools/publish.ps1` replaces only `Aethelog.exe`, so `artifacts\userdata` survives a republish. Older versions kept this data in `%APPDATA%\dev.aetherlog.app` and `%LOCALAPPDATA%\dev.aetherlog.app\archive`; the first start moves or copies it into `userdata` (skipped when `AETHELOG_DATA` is set).
 - **Local archive** (`logfile.rs`): every load first imports the source logs into `archive` and the app then reads only the archive. A session (one game log file) is a stream `<character>/log/<name>_<first record time>.alog`: 24-byte header (magic `ALG1`, first record time, next record number expected, record count, data length) and length-framed records. Import appends only the records whose number is not stored yet, so a growing log costs only its new lines. `.log` copies from older versions are folded into the streams and removed on the first run. The scan skips the archive itself, `node_modules`, `target`, `.git` and `demo-logs`. Originals are only read. Set `AETHELOG_DATA` together with `AETHELOG_LOGS` for demos so sample logs and names never mix with real ones.
 - `Cargo.toml` turns debug information off for every profile (it only bloats `target/`).
 - Default location: `AETHELOG_LOGS` if set (not remembered as the last location), else the last opened one, else `Documents\My Games\FINAL FANTASY XIV - A Realm Reborn`.
@@ -95,7 +95,8 @@ Delete `userdata/dict` and start the app to download the tables again (`start_di
 - The background follows the FFXIV character-select screen (bright blue, light streaks, small particles). No crystal ornaments. Keep particles small.
 - The window frame follows the viewport width (no maximum width; side margins use `clamp`).
 - Page size defaults to all and is chosen from a selector, not typed (50 up to all). A "loading" popup appears only when a query is still running after 400 ms.
-- Background particles drift and twinkle (CSS animation; disabled for reduced motion or the saved animation preference). The menu offers animation on/off and import intervals of 1, 2, 5, 10, 30 or 60 seconds (default 1). Preferences are restored on launch; monitoring itself starts enabled.
+- Background particles drift and twinkle (CSS animation; disabled for reduced motion or the saved animation preference). The menu offers animation on/off; there is no import interval setting. Preferences are restored on launch; monitoring itself starts enabled.
+- Automatic import (`start_monitor` in `lib.rs`) is event driven: a `notify` watch on the log location triggers a background import 1 second after the last `.log` change, plus a rescan every 60 seconds for missed notifications. Resuming monitoring imports at once. Do not go back to fast polling: the game writes logs only at 1,000 lines or logout (see the `ffxiv-log-format` skill).
 - Characters are chosen by name; show the ID only when no name could be determined.
 
 ## 7. Known limits

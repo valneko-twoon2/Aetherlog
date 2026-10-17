@@ -615,22 +615,57 @@ fn start_dictionary(state: &Arc<AppState>) {
     });
 }
 
-/// One worker polls sources; start_load_mode serializes it with all other archive work.
+/// Imports again when the game writes a `.log`.  The game writes a log only when it holds 1,000
+/// records or at logout, so a file-system watch replaces polling.  A slow rescan covers missed
+/// notifications (synced or network folders) and locations that cannot be watched.  One worker
+/// does both; start_load_mode serializes it with all other archive work.
 fn start_monitor(state: &Arc<AppState>) {
+    use notify::Watcher;
+    use std::time::{Duration, Instant};
+    // The game writes a file in several calls; import once they have stopped.
+    const SETTLE: Duration = Duration::from_secs(1);
+    const RESCAN: Duration = Duration::from_secs(60);
     let weak = Arc::downgrade(state);
     std::thread::spawn(move || {
-        let mut last = std::time::Instant::now();
+        let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
+        let is_log = |p: &Path| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("log"));
+        // The location being watched, its watcher unless setting it up failed, and when it was set up.
+        let mut watched: Option<(PathBuf, Option<notify::RecommendedWatcher>, Instant)> = None;
+        let mut due: Option<Instant> = None;
+        let mut last_scan = Instant::now();
+        let mut was_monitoring = true;
         loop {
-            // Short ticks let interval changes take effect without waiting for an old long interval.
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            let mut changed = false;
+            if let Ok(first) = rx.recv_timeout(Duration::from_millis(200)) {
+                for event in std::iter::once(first).chain(rx.try_iter()) {
+                    // An error (such as an overflowing event buffer) may hide a change.
+                    changed |= event.map_or(true, |e| e.paths.iter().any(|p| is_log(p)));
+                }
+            }
             let Some(state) = weak.upgrade() else { break };
-            let (path, seconds) = {
+            let (path, monitoring) = {
                 let inner = lock(&state.inner);
-                (inner.path.clone(), inner.preferences.refresh_seconds)
+                (inner.path.clone(), inner.monitoring)
             };
-            if last.elapsed() >= std::time::Duration::from_secs(seconds)
-                && state.start_load_mode(path, true, false, true) {
-                last = std::time::Instant::now();
+            let rescan = last_scan.elapsed() >= RESCAN;
+            let stale = watched.as_ref().map_or(true, |(p, w, at)| *p != path || (w.is_none() && at.elapsed() >= RESCAN));
+            if stale {
+                let watcher = notify::recommended_watcher(tx.clone()).ok().and_then(|mut w| {
+                    w.watch(&path, notify::RecursiveMode::Recursive).ok().map(|()| w)
+                });
+                watched = Some((path.clone(), watcher, Instant::now()));
+            }
+            if changed {
+                due = Some(Instant::now() + SETTLE);
+            }
+            if monitoring && !was_monitoring {
+                due = Some(Instant::now());
+            }
+            was_monitoring = monitoring;
+            let ready = due.is_some_and(|t| Instant::now() >= t);
+            if monitoring && (ready || rescan) && state.start_load_mode(path, true, false, true) {
+                due = None;
+                last_scan = Instant::now();
             }
         }
     });
@@ -784,6 +819,43 @@ mod metadata_tests {
         assert!(app.start_load_mode(source, true, false, true));
         wait_for_load(&app);
         assert_eq!(lock(&app.inner).entries.len(), 3);
+    }
+
+    fn wait_for_entries(app: &AppState, count: usize) -> bool {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            if lock(&app.inner).entries.len() == count { return true; }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        false
+    }
+
+    #[test]
+    fn monitor_imports_when_the_game_writes_a_log() {
+        let dir = logfile::tests::temp("live-watch");
+        let source = dir.join("game");
+        logfile::tests::game_log(&source, "00000000.log", 0, &["first"]);
+        let app = Arc::new(AppState {
+            inner: Mutex::new(Inner { monitoring: true, ..Inner::default() }),
+            progress: [AtomicUsize::new(0), AtomicUsize::new(0)],
+            data_dir: dir.clone(), archive_dir: dir.join("archive"),
+            source_cache: Mutex::new(logfile::SourceCache::default()),
+        });
+        assert!(app.start_load(source.clone(), true, false));
+        wait_for_load(&app);
+        start_monitor(&app);
+        // Let the watch start before the game writes.
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        logfile::tests::game_log(&source, "00000000.log", 0, &["first", "second"]);
+        assert!(wait_for_entries(&app, 2), "a written log is imported without polling");
+        // Paused: changes wait until monitoring is enabled again.
+        lock(&app.inner).monitoring = false;
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        logfile::tests::game_log(&source, "00000001.log", 2, &["third"]);
+        std::thread::sleep(std::time::Duration::from_millis(2000));
+        assert_eq!(lock(&app.inner).entries.len(), 2);
+        lock(&app.inner).monitoring = true;
+        assert!(wait_for_entries(&app, 3), "resuming imports what was written meanwhile");
     }
 
     #[test]
