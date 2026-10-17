@@ -29,7 +29,8 @@ A read-only desktop viewer for FFXIV logs: Rust (Tauri 2) backend, Vue 3 + Vite 
 | `tools/preview.ps1` | Front end only: starts the Vite dev server in a browser (`--open`) |
 | `web/src/mock.js` | In-browser stand-in backend used by `npm run dev` outside Tauri: 150,000 fictional lines, a fake start-up load and slow large pages. Dev builds only, never shipped |
 | `tools/make_demo_logs.ps1` | Writes fictional demo logs to `docs/demo-logs/` (used for README screenshots, so no real character names appear) |
-| `tools/*.bat` | Double-click wrappers for the `.ps1` scripts (`publish`, `make_notices`, `preview`, `set_version`, `make_demo_logs`) |
+| `tools/make_screenshots.ps1` (`.bat`, `.mjs`, `capture_window.ps1`) | Retakes `docs/images/main.png`, `menu.png` and `battle.png` from the built exe: copies the demo logs to `C:\Users\Public\Aethelog-demo-logs`, starts the exe with `AETHELOG_DATA` pointing at a scratch folder and the WebView2 debugging port open, clicks the tabs and the menu through that port and saves the window (PrintWindow, 1282 x 852) as PNG. `-Build` runs `publish.ps1` first. Needs Node 22+; do not touch the mouse while it runs. Always look at the pictures before committing |
+| `tools/*.bat` | Double-click wrappers for the `.ps1` scripts (`publish`, `make_notices`, `preview`, `set_version`, `make_demo_logs`, `make_screenshots`) |
 | `tools/start.bat` | Launches `artifacts\Aethelog.exe`, else `src-tauri\target\release\Aethelog.exe` |
 | `.githooks/`, `.claude/hooks/` | Policy enforcement for commits (see `AGENTS.md`) |
 
@@ -85,7 +86,7 @@ Delete `userdata/dict` and start the app to download the tables again. `start_di
 - **Local archive** (`logfile.rs`): every load first imports the source logs into `archive` and the app then reads only the archive. A session (one game log file) is a stream `<character>/log/<name>_<first record time>.alog`: 24-byte header (magic `ALG1`, first record time, next record number expected, record count, data length) and length-framed records. Import appends only the records whose number is not stored yet, so a growing log costs only its new lines. `.log` copies from older versions are folded into the streams and removed on the first run. The scan skips the archive itself, `node_modules`, `target`, `.git` and `demo-logs`. Originals are only read. Set `AETHELOG_DATA` together with `AETHELOG_LOGS` for demos so sample logs and names never mix with real ones.
 - `Cargo.toml` turns debug information off for every profile (it only bloats `target/`).
 - Default location: `AETHELOG_LOGS` if set (not remembered as the last location), else the last opened one, else `Documents\My Games\FINAL FANTASY XIV - A Realm Reborn`.
-- Screenshots for the README must come from the demo logs only: set `AETHELOG_LOGS` to a copy of `docs/demo-logs` and check every image before committing.
+- Screenshots for the README must come from the demo logs only: run `tools/make_screenshots.ps1` (it does that) and check every image before committing.
 
 ## 6. UI direction (requested by the owner)
 
